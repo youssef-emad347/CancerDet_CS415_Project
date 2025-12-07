@@ -1,0 +1,32 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User Profiles
+    match /users/{userId} {
+      // Allow any authenticated user to read profiles (to find doctors/patients)
+      allow read: if request.auth != null;
+      // Only the user can create/update their own profile
+      allow create, update: if request.auth != null && request.auth.uid == userId;
+      allow delete: if false;
+    }
+
+    // Chats
+    match /chats/{chatId} {
+      // Allow create if user is a participant
+      allow create: if request.auth != null && 
+                    request.resource.data.participants.hasAny([request.auth.uid]);
+      // Allow read/update if user is already a participant
+      allow read, update: if request.auth != null && 
+                          resource.data.participants.hasAny([request.auth.uid]);
+
+      // Messages (Subcollection)
+      match /messages/{messageId} {
+        // Allow read/write if user is a participant of the PARENT chat
+        // Note: usage of 'get' incurs a read cost, but is necessary to check parent doc
+        allow read, write: if request.auth != null && 
+                           get(/databases/$(database)/documents/chats/$(chatId)).data.participants.hasAny([request.auth.uid]);
+      }
+    }
+  }
+}

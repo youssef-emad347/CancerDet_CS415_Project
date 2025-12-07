@@ -1,53 +1,85 @@
 /**
- * Below are the colors that are used in the app. The colors are defined in the light and dark mode.
- * There are many other ways to style your app. For example, [Nativewind](https://www.nativewind.dev/), [Tamagui](https://tamagui.dev/), [unistyles](https://reactnativeunistyles.vercel.app), etc.
+ * Application Theme Configuration
+ * Defines the color palette and typography for the app in both light and dark modes.
  */
 
 import { Platform } from 'react-native';
 
-const tintColorLight = '#0a7ea4';
-const tintColorDark = '#fff';
+// Brand Palette - Medical Teal/Blue Theme
+const Palette = {
+  primary: '#0D9488', // Teal 600 - Trustworthy, Medical
+  primaryDark: '#2DD4BF', // Teal 400 - Brighter for dark mode
+  secondary: '#64748B', // Slate 500
+  secondaryDark: '#94A3B8', // Slate 400
+  backgroundLight: '#FFFFFF',
+  backgroundDark: '#111827', // Gray 900
+  surfaceLight: '#F3F4F6', // Gray 100
+  surfaceDark: '#1F2937', // Gray 800
+  error: '#EF4444',
+  success: '#10B981',
+  warning: '#F59E0B',
+};
+
+const tintColorLight = Palette.primary;
+const tintColorDark = Palette.primaryDark;
 
 export const Colors = {
   light: {
     text: '#11181C',
-    background: '#fff',
+    background: Palette.backgroundLight,
+    surface: Palette.surfaceLight,
     tint: tintColorLight,
     icon: '#687076',
     tabIconDefault: '#687076',
     tabIconSelected: tintColorLight,
+    primary: Palette.primary,
+    secondary: Palette.secondary,
+    accent: Palette.warning,
+    error: Palette.error,
+    success: Palette.success,
+    border: '#E5E7EB',
   },
   dark: {
     text: '#ECEDEE',
-    background: '#151718',
+    background: Palette.backgroundDark,
+    surface: Palette.surfaceDark,
     tint: tintColorDark,
     icon: '#9BA1A6',
     tabIconDefault: '#9BA1A6',
     tabIconSelected: tintColorDark,
+    primary: Palette.primaryDark,
+    secondary: Palette.secondaryDark,
+    accent: Palette.warning,
+    error: Palette.error,
+    success: Palette.success,
+    border: '#374151',
   },
 };
 
-export const Fonts = Platform.select({
-  ios: {
-    /** iOS `UIFontDescriptorSystemDesignDefault` */
-    sans: 'system-ui',
-    /** iOS `UIFontDescriptorSystemDesignSerif` */
-    serif: 'ui-serif',
-    /** iOS `UIFontDescriptorSystemDesignRounded` */
-    rounded: 'ui-rounded',
-    /** iOS `UIFontDescriptorSystemDesignMonospaced` */
-    mono: 'ui-monospace',
+export const Typography = {
+  fontFamily: 'System', // Use system default for best native feel
+  h1: {
+    fontSize: 28,
+    fontWeight: '700' as const,
+    letterSpacing: 0.5,
   },
-  default: {
-    sans: 'normal',
-    serif: 'serif',
-    rounded: 'normal',
-    mono: 'monospace',
+  h2: {
+    fontSize: 22,
+    fontWeight: '600' as const,
+    letterSpacing: 0.3,
   },
-  web: {
-    sans: "system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif",
-    serif: "Georgia, 'Times New Roman', serif",
-    rounded: "'SF Pro Rounded', 'Hiragino Maru Gothic ProN', Meiryo, 'MS PGothic', sans-serif",
-    mono: "SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
+  h3: {
+    fontSize: 18,
+    fontWeight: '600' as const,
   },
-});
+  body: {
+    fontSize: 16,
+    fontWeight: '400' as const,
+    lineHeight: 24,
+  },
+  caption: {
+    fontSize: 14,
+    fontWeight: '400' as const,
+    color: '#6B7280',
+  },
+};

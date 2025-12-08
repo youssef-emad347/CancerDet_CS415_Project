@@ -11,6 +11,7 @@
     "doctorCode": "My Doctor Code",
     "shareCode": "Share this code",
     "shareCodeDesc": "Patients can use this code to start a chat with you."
+
   },
   "home": {
       "welcome": "Welcome back,",
@@ -70,5 +71,58 @@
     "home": "Home",
     "chat": "Chat",
     "profile": "Profile"
+
+  },
+  
+  "privacy": {
+    "title": "Privacy & Security",
+    "security": "Security",
+    "privacy": "Privacy",
+    "dataManagement": "Data Management",
+    "legal": "Legal",
+    "biometricAuth": "Biometric Authentication",
+    "biometricDesc": "Use biometrics to unlock the app",
+    "biometricNotAvailable": "Not available on this device",
+    "biometricsNotAvailableTitle": "Biometrics Not Available",
+    "biometricsNotAvailableMsg": "Biometric authentication is not available on this device.",
+    "authenticatePrompt": "Authenticate to enable biometric login",
+    "usePasscode": "Use Passcode",
+    "authFailedTitle": "Authentication Failed",
+    "authFailedMsg": "Could not verify your identity",
+    "autoLock": "Auto-Lock",
+    "autoLockDesc": "Lock the app after inactivity",
+    "immediately": "Immediately",
+    "never": "Never",
+    "afterMinutes": "After {{minutes}} minutes",
+    "twoFactor": "Two-Factor Authentication",
+    "twoFactorDesc": "Add an extra layer of security",
+    "twoFactorEnabledTitle": "Two-Factor Authentication",
+    "twoFactorEnabledMsg": "You will need to verify your identity via email when logging in from new devices.",
+    "dataSharing": "Data Sharing for Research",
+    "dataSharingDesc": "Help improve cancer detection algorithms",
+    "diagnosticData": "Share Diagnostic Data",
+    "diagnosticDataDesc": "Share anonymized medical data for research",
+    "exportData": "Export My Data",
+    "exportDataDesc": "Download all your data",
+    "exportDataTitle": "Export Data",
+    "exportDataMsg": "Your data will be prepared for export. You will receive it via email within 24 hours.",
+    "export": "Export",
+    "exportStartedTitle": "Export Started",
+    "exportStartedMsg": "Your data export has been initiated. You will receive an email when it's ready.",
+    "deleteAccount": "Delete Account",
+    "deleteAccountDesc": "Permanently delete your account and data",
+    "deleteAccountTitle": "Delete Account",
+    "deleteAccountWarning": "This action cannot be undone. All your data will be permanently deleted.",
+    "confirmDeleteTitle": "Confirm Deletion",
+    "confirmDeleteMsg": "Please enter your password to confirm account deletion.",
+    "confirm": "Confirm",
+    "delete": "Delete",
+    "accountDeletedTitle": "Account Deleted",
+    "accountDeletedMsg": "Your account has been scheduled for deletion.",
+    "privacyPolicy": "Privacy Policy",
+    "terms": "Terms of Service",
+    "version": "Version"
   }
 }
+
+

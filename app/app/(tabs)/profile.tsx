@@ -119,12 +119,15 @@ export default function ProfileScreen() {
           <SettingItem 
             icon="person.fill" 
             title={t('profile.editProfile')}
-            onPress={() => router.push('/edit-profile')}
+             onPress={() => router.push('/edit-profile')} // اضف هذا السطر
           />
           <View style={styles.separator} />
-          <SettingItem icon="gearshape.fill" title={t('profile.privacy')} />
+          <SettingItem icon="gearshape.fill" title={t('profile.privacy')} 
+           onPress={() => router.push('/privacy-security')} />
+
+            
           <View style={styles.separator} />
-          <SettingItem icon="house.fill" title={t('profile.address')} />
+          {/* <SettingItem icon="house.fill" title={t('profile.address')} /> */}
           <View style={styles.separator} />
           <SettingItem 
             icon="globe" 

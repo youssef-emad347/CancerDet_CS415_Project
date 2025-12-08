@@ -1,7 +1,7 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
 import { Platform, View } from 'react-native';
-import { useTranslation } from 'react-i18next'; // Added
+import { useTranslation } from 'react-i18next';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -9,29 +9,29 @@ import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
 
 export default function TabLayout() {
-  const { t } = useTranslation(); // Added
+  const { t } = useTranslation();
   const colorScheme = useColorScheme();
-  const themeColors = Colors[colorScheme ?? 'light']; // Get current theme colors
+  const themeColors = Colors[colorScheme ?? 'light'];
 
   return (
     <Tabs
       screenOptions={{
-        tabBarActiveTintColor: themeColors.primary, // Use primary brand color for active icon/label
-        tabBarInactiveTintColor: themeColors.icon, // Use icon color for inactive
+        tabBarActiveTintColor: themeColors.primary,
+        tabBarInactiveTintColor: themeColors.icon,
         headerShown: false,
         tabBarButton: HapticTab,
         tabBarStyle: {
-          backgroundColor: 'transparent', // Make tabBarStyle transparent so tabBarBackground can show
+          backgroundColor: 'transparent',
           borderTopWidth: 1,
-          borderTopColor: themeColors.border, // Apply theme border color
+          borderTopColor: themeColors.border,
           ...Platform.select({
             ios: {
-              position: 'absolute', // For iOS blur effect (if re-added), but with solid background now
+              position: 'absolute',
             },
             default: {},
           }),
         },
-        tabBarBackground: () => ( // Custom background component
+        tabBarBackground: () => (
           <View style={{ flex: 1, backgroundColor: themeColors.background }} />
         ),
       }}>

@@ -1,258 +1,347 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
-import tensorflow as tf
+from fastapi import FastAPI, HTTPException, Request
+from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Union, Optional
 import numpy as np
 import joblib
-import pandas as pd
+import tensorflow as tf
+import time
+import uuid
 import os
-import sys
+from contextlib import asynccontextmanager
 
-app = Flask(__name__)
-CORS(app)  # السماح بطلبات من الواجهة الأمامية
+# ---------- CONFIG ----------
+ROOT = os.path.dirname(__file__)
 
-# إعداد المسارات للنماذج
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-
-MODEL_PATHS = {
-    'breast': {
-        'model': os.path.join(BASE_DIR, 'Breast Cancer', 'Breast_Cancer.keras'),
-        'scaler': os.path.join(BASE_DIR, 'Breast Cancer', 'breast_cancer_scaler.pkl'),
-        'features': 30  # عدد الميزات بعد إسقاط id و Unnamed:32
+MODELS_INFO = {
+    "breast": {
+        "model_path": os.path.join(ROOT, "Breast Cancer/Breast_Cancer.keras"),
+        "scaler_path": os.path.join(ROOT, "Breast Cancer/breast_cancer_scaler.pkl"),
+        "features": [
+            "radius_mean", "texture_mean", "perimeter_mean", "area_mean",
+            "smoothness_mean", "compactness_mean", "concavity_mean",
+            "concave_points_mean", "symmetry_mean", "fractal_dimension_mean",
+            "radius_se", "texture_se", "perimeter_se", "area_se",
+            "smoothness_se", "compactness_se", "concavity_se",
+            "concave_points_se", "symmetry_se", "fractal_dimension_se",
+            "radius_worst", "texture_worst", "perimeter_worst", "area_worst",
+            "smoothness_worst", "compactness_worst", "concavity_worst",
+            "concave_points_worst", "symmetry_worst", "fractal_dimension_worst"
+        ]
     },
-    'colon': {
-        'model': os.path.join(BASE_DIR, 'Colorectal Cancer', 'colon_risk_model.keras'),
-        'scaler': os.path.join(BASE_DIR, 'Colorectal Cancer', 'colon_scaler.pkl'),
-        'features': 15  # تأكد من العدد الفعلي
+    "lung": {
+        "model_path": os.path.join(ROOT, "Lung Cancer/Lung_Cancer.keras"),
+        "scaler_path": os.path.join(ROOT, "Lung Cancer/lung_scaler.pkl"),
+        "features": [
+            "age", "pack_years", "gender_Male", "gender_Female",
+            "radon_exposure_High", "radon_exposure_Low", "radon_exposure_Unknown",
+            "asbestos_exposure_Yes", "asbestos_exposure_No",
+            "secondhand_smoke_exposure_Yes", "secondhand_smoke_exposure_No",
+            "copd_diagnosis_Yes", "copd_diagnosis_No",
+            "alcohol_consumption_None", "alcohol_consumption_Moderate", "alcohol_consumption_High",
+            "family_history_Yes", "family_history_No"
+        ],
+        "categorical_mapping": {
+            "gender": ["Male", "Female"],
+            "radon_exposure": ["High", "Low", "Unknown"],
+            "asbestos_exposure": ["Yes", "No"],
+            "secondhand_smoke_exposure": ["Yes", "No"],
+            "copd_diagnosis": ["Yes", "No"],
+            "alcohol_consumption": ["None", "Moderate", "High"],
+            "family_history": ["Yes", "No"]
+        }
     },
-    'lung': {
-        'model': os.path.join(BASE_DIR, 'Lung Cancer', 'Lung_Cancer.keras'),
-        'scaler': os.path.join(BASE_DIR, 'Lung Cancer', 'Lung_cancer_scaler.pkl'),
-        'features': 9  # تأكد من العدد الفعلي
+    "colorectal": {
+        "model_path": os.path.join(ROOT, "Colorectal Cancer/colon_risk_model.keras"),
+        "scaler_path": os.path.join(ROOT, "Colorectal Cancer/colon_scaler.pkl"),
+        "features": [
+            "Age", "Gender_Male", "Gender_Female", "BMI",
+            "Lifestyle_Sedentary", "Lifestyle_Active", "Lifestyle_Very Active",
+            "Ethnicity_African", "Ethnicity_Asian", "Ethnicity_Caucasian", "Ethnicity_Hispanic", "Ethnicity_Other",
+            "Family_History_CRC_Yes", "Family_History_CRC_No",
+            "Pre-existing Conditions_Diabetes", "Pre-existing Conditions_None", "Pre-existing Conditions_Other",
+            "Carbohydrates (g)", "Proteins (g)", "Fats (g)",
+            "Vitamin A (IU)", "Vitamin C (mg)", "Iron (mg)"
+        ],
+        "categorical_mapping": {
+            "Gender": ["Male", "Female"],
+            "Lifestyle": ["Sedentary", "Active", "Very Active"],
+            "Ethnicity": ["African", "Asian", "Caucasian", "Hispanic", "Other"],
+            "Family_History_CRC": ["Yes", "No"],
+            "Pre-existing Conditions": ["Diabetes", "None", "Other"]
+        }
     }
 }
 
-# تحميل النماذج والمقاييس (تخزين مؤقت)
-models = {}
-scalers = {}
+# In-memory holders
+_loaded_models = {}
+_loaded_scalers = {}
 
 
-def load_models():
-    """تحميل جميع النماذج والمقاييس عند بدء التشغيل"""
-    print("🚀 جار تحميل النماذج...")
+# ---------- Pydantic Models ----------
+class PredictRequest(BaseModel):
+    model_name: str = Field(..., description="Model name: 'breast', 'lung', or 'colorectal'")
+    features: Dict[str, Any] = Field(..., description="Features dictionary")
+    threshold: Optional[float] = Field(0.5, description="Classification threshold")
 
-    for cancer_type, paths in MODEL_PATHS.items():
+
+# ---------- Utility Functions ----------
+def ensure_model_loaded(model_key: str):
+    if model_key not in MODELS_INFO:
+        raise HTTPException(status_code=400, detail=f"Unknown model '{model_key}'. Allowed: {list(MODELS_INFO.keys())}")
+
+    if model_key not in _loaded_models:
+        info = MODELS_INFO[model_key]
         try:
-            # تحميل النموذج
-            models[cancer_type] = tf.keras.models.load_model(paths['model'])
-            # تحميل السكيلر
-            scalers[cancer_type] = joblib.load(paths['scaler'])
-            print(f"✅ تم تحميل نموذج {cancer_type} بنجاح")
+            _loaded_models[model_key] = tf.keras.models.load_model(info["model_path"])
         except Exception as e:
-            print(f"❌ خطأ في تحميل نموذج {cancer_type}: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to load model file for '{model_key}': {e}")
 
-    print("✅ تم تحميل جميع النماذج بنجاح!")
-
-
-# تحميل النماذج عند بدء التطبيق
-load_models()
-
-
-@app.route('/')
-def home():
-    """الصفحة الرئيسية"""
-    return jsonify({
-        'message': 'مرحباً بخادم الكشف عن السرطان AI',
-        'available_models': list(MODEL_PATHS.keys()),
-        'endpoints': {
-            '/predict/breast': 'POST - توقع سرطان الثدي',
-            '/predict/colon': 'POST - توقع سرطان القولون',
-            '/predict/lung': 'POST - توقع سرطان الرئة',
-            '/predict/all': 'POST - توقع جميع الأنواع',
-            '/models/status': 'GET - حالة النماذج'
-        }
-    })
-
-
-@app.route('/predict/<cancer_type>', methods=['POST'])
-def predict_single(cancer_type):
-    """توقع لنوع واحد من السرطان"""
-    if cancer_type not in models:
-        return jsonify({'error': f'نموذج {cancer_type} غير متوفر'}), 400
-
-    try:
-        # الحصول على البيانات من الطلب
-        data = request.json
-
-        if not data or 'features' not in data:
-            return jsonify({'error': 'يرجى إرسال مصفوفة features في الجسم'}), 400
-
-        features = np.array(data['features']).reshape(1, -1)
-
-        # التحقق من عدد الميزات
-        expected_features = MODEL_PATHS[cancer_type]['features']
-        if features.shape[1] != expected_features:
-            return jsonify({
-                'error': f'عدد الميزات غير صحيح. المتوقع: {expected_features}, المستلم: {features.shape[1]}'
-            }), 400
-
-        # تطبيق التطبيع
-        scaled_features = scalers[cancer_type].transform(features)
-
-        # التوقع
-        prediction_prob = models[cancer_type].predict(scaled_features, verbose=0)[0][0]
-
-        # تطبيق الحد الأدنى المناسب
-        thresholds = {
-            'breast': 0.2,
-            'colon': 0.3,
-            'lung': 0.3
-        }
-
-        threshold = thresholds.get(cancer_type, 0.5)
-        prediction = 1 if prediction_prob > threshold else 0
-
-        # إعداد النتيجة
-        confidence = float(prediction_prob) if prediction == 1 else float(1 - prediction_prob)
-
-        return jsonify({
-            'cancer_type': cancer_type,
-            'prediction': int(prediction),
-            'probability': float(prediction_prob),
-            'threshold_used': threshold,
-            'confidence': confidence,
-            'message': 'إيجابي (خطر)' if prediction == 1 else 'سلبي (آمن)'
-        })
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/predict/all', methods=['POST'])
-def predict_all():
-    """توقع لجميع أنواع السرطان"""
-    try:
-        data = request.json
-
-        if not data or 'features' not in data:
-            return jsonify({'error': 'يرجى إرسال مصفوفة features في الجسم'}), 400
-
-        results = {}
-
-        for cancer_type in MODEL_PATHS.keys():
-            try:
-                # إعادة استخدام نفس البيانات أو الحصول على ميزات محددة
-                # هنا يمكنك تعديل كيفية استخراج الميزات لكل نوع
-                features = np.array(data['features']).reshape(1, -1)
-
-                # قم بقص أو تمديد الميزات حسب الحاجة
-                expected_features = MODEL_PATHS[cancer_type]['features']
-                if features.shape[1] > expected_features:
-                    features = features[:, :expected_features]
-                elif features.shape[1] < expected_features:
-                    # تعبئة بأصفار إذا لزم الأمر
-                    padded = np.zeros((1, expected_features))
-                    padded[:, :features.shape[1]] = features
-                    features = padded
-
-                # تطبيق التطبيع
-                scaled_features = scalers[cancer_type].transform(features)
-
-                # التوقع
-                prediction_prob = models[cancer_type].predict(scaled_features, verbose=0)[0][0]
-
-                # تطبيق الحد الأدنى
-                thresholds = {
-                    'breast': 0.2,
-                    'colon': 0.3,
-                    'lung': 0.3
-                }
-
-                threshold = thresholds.get(cancer_type, 0.5)
-                prediction = 1 if prediction_prob > threshold else 0
-
-                results[cancer_type] = {
-                    'prediction': int(prediction),
-                    'probability': float(prediction_prob),
-                    'threshold_used': threshold,
-                    'risk_level': 'high' if prediction == 1 else 'low'
-                }
-
-            except Exception as e:
-                results[cancer_type] = {
-                    'error': str(e),
-                    'prediction': -1  # قيمة خطأ
-                }
-
-        # حساب النتيجة الإجمالية
-        positive_count = sum(1 for r in results.values() if isinstance(r, dict) and r.get('prediction', 0) == 1)
-        total_count = len([r for r in results.values() if isinstance(r, dict) and 'prediction' in r])
-
-        overall_risk = 'high' if positive_count > 0 else 'low'
-
-        return jsonify({
-            'overall_risk': overall_risk,
-            'positive_detections': positive_count,
-            'total_tests': total_count,
-            'results': results
-        })
-
-    except Exception as e:
-        return jsonify({'error': str(e)}), 500
-
-
-@app.route('/models/status', methods=['GET'])
-def models_status():
-    """الحصول على حالة جميع النماذج"""
-    status = {}
-
-    for cancer_type, paths in MODEL_PATHS.items():
+    if model_key not in _loaded_scalers:
+        info = MODELS_INFO[model_key]
         try:
-            model_loaded = cancer_type in models and models[cancer_type] is not None
-            scaler_loaded = cancer_type in scalers and scalers[cancer_type] is not None
-
-            status[cancer_type] = {
-                'model_loaded': model_loaded,
-                'scaler_loaded': scaler_loaded,
-                'model_path': paths['model'],
-                'scaler_path': paths['scaler'],
-                'expected_features': paths['features']
-            }
-        except:
-            status[cancer_type] = {
-                'model_loaded': False,
-                'scaler_loaded': False,
-                'error': 'فشل في التحقق'
-            }
-
-    return jsonify({
-        'status': 'running',
-        'models': status,
-        'loaded_count': sum(1 for s in status.values() if s.get('model_loaded', False))
-    })
+            _loaded_scalers[model_key] = joblib.load(info["scaler_path"])
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=f"Failed to load scaler for '{model_key}': {e}")
 
 
-@app.route('/reload', methods=['POST'])
-def reload_models():
-    """إعادة تحميل النماذج"""
-    global models, scalers
+def preprocess_features(model_key: str, raw_features: Dict[str, Any]):
+    info = MODELS_INFO[model_key]
 
+    if model_key == "breast":
+        # For breast cancer, use direct values
+        features_list = []
+        for feature_name in info["features"]:
+            if feature_name not in raw_features:
+                raise HTTPException(status_code=400, detail=f"Missing feature: {feature_name}")
+            try:
+                value = float(raw_features[feature_name])
+                features_list.append(value)
+            except ValueError:
+                raise HTTPException(status_code=400,
+                                    detail=f"Invalid value for {feature_name}: {raw_features[feature_name]}")
+
+        return np.array(features_list).reshape(1, -1), raw_features
+
+    elif model_key == "lung":
+        # Preprocess lung cancer features (one-hot encoding)
+        processed_features = []
+
+        # Age and pack_years (continuous)
+        try:
+            processed_features.append(float(raw_features.get("age", 0)))
+            processed_features.append(float(raw_features.get("pack_years", 0)))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Age and pack_years must be numbers")
+
+        # Gender (one-hot)
+        gender = raw_features.get("gender", "Male")
+        gender_options = info["categorical_mapping"]["gender"]
+        for option in gender_options:
+            processed_features.append(1.0 if gender == option else 0.0)
+
+        # Radon exposure (one-hot)
+        radon = raw_features.get("radon_exposure", "Unknown")
+        radon_options = info["categorical_mapping"]["radon_exposure"]
+        for option in radon_options:
+            processed_features.append(1.0 if radon == option else 0.0)
+
+        # Boolean features (Yes/No)
+        bool_features = [
+            ("asbestos_exposure", "Yes"),
+            ("secondhand_smoke_exposure", "Yes"),
+            ("copd_diagnosis", "Yes"),
+            ("family_history", "Yes")
+        ]
+
+        for feature_name, yes_value in bool_features:
+            value = raw_features.get(feature_name, False)
+            # Handle both boolean and string values
+            if isinstance(value, bool):
+                processed_features.append(1.0 if value else 0.0)
+                processed_features.append(0.0 if value else 1.0)
+            else:
+                processed_features.append(1.0 if str(value) == yes_value else 0.0)
+                processed_features.append(0.0 if str(value) == yes_value else 1.0)
+
+        # Alcohol consumption (one-hot)
+        alcohol = raw_features.get("alcohol_consumption", "None")
+        alcohol_options = info["categorical_mapping"]["alcohol_consumption"]
+        for option in alcohol_options:
+            processed_features.append(1.0 if alcohol == option else 0.0)
+
+        return np.array(processed_features).reshape(1, -1), raw_features
+
+    elif model_key == "colorectal":
+        # Preprocess colorectal cancer features
+        processed_features = []
+
+        # Age and BMI (continuous)
+        try:
+            processed_features.append(float(raw_features.get("Age", 0)))
+            processed_features.append(float(raw_features.get("BMI", 0)))
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Age and BMI must be numbers")
+
+        # Gender (one-hot)
+        gender = raw_features.get("Gender", "Male")
+        gender_options = info["categorical_mapping"]["Gender"]
+        for option in gender_options:
+            processed_features.append(1.0 if gender == option else 0.0)
+
+        # Lifestyle (one-hot)
+        lifestyle = raw_features.get("Lifestyle", "Sedentary")
+        lifestyle_options = info["categorical_mapping"]["Lifestyle"]
+        for option in lifestyle_options:
+            processed_features.append(1.0 if lifestyle == option else 0.0)
+
+        # Ethnicity (one-hot)
+        ethnicity = raw_features.get("Ethnicity", "Other")
+        ethnicity_options = info["categorical_mapping"]["Ethnicity"]
+        for option in ethnicity_options:
+            processed_features.append(1.0 if ethnicity == option else 0.0)
+
+        # Family History (one-hot)
+        family_history = raw_features.get("Family_History_CRC", "No")
+        family_history_options = info["categorical_mapping"]["Family_History_CRC"]
+        for option in family_history_options:
+            processed_features.append(1.0 if family_history == option else 0.0)
+
+        # Pre-existing Conditions (one-hot)
+        conditions = raw_features.get("Pre-existing Conditions", "None")
+        conditions_options = info["categorical_mapping"]["Pre-existing Conditions"]
+        for option in conditions_options:
+            processed_features.append(1.0 if conditions == option else 0.0)
+
+        # Nutritional values (continuous)
+        nutritional_features = [
+            "Carbohydrates (g)", "Proteins (g)", "Fats (g)",
+            "Vitamin A (IU)", "Vitamin C (mg)", "Iron (mg)"
+        ]
+
+        for feature_name in nutritional_features:
+            try:
+                processed_features.append(float(raw_features.get(feature_name, 0)))
+            except ValueError:
+                raise HTTPException(status_code=400, detail=f"{feature_name} must be a number")
+
+        return np.array(processed_features).reshape(1, -1), raw_features
+
+    else:
+        raise HTTPException(status_code=400, detail=f"Unsupported model: {model_key}")
+
+
+# ---------- Lifespan ----------
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("[lifespan] Loading all models and scalers...")
+    for key in MODELS_INFO.keys():
+        try:
+            ensure_model_loaded(key)
+            print(f"[lifespan] Loaded: {key}")
+        except Exception as e:
+            print(f"[lifespan] Failed to load {key}: {e}")
+    yield
+    print("[lifespan] Server shutdown cleanup...")
+
+
+# ---------- FastAPI App ----------
+app = FastAPI(
+    title="Cancer Prediction API",
+    description="API for predicting cancer risk based on patient data",
+    version="2.0",
+    lifespan=lifespan
+)
+
+
+@app.get("/")
+async def root():
+    return {
+        "message": "Cancer Prediction API",
+        "version": "2.0",
+        "available_models": list(MODELS_INFO.keys()),
+        "endpoints": {
+            "/health": "Check server and model status",
+            "/predict": "Make predictions (POST)"
+        }
+    }
+
+
+@app.get("/health")
+def health():
+    status = {}
+    for k in MODELS_INFO:
+        ok = (_loaded_models.get(k) is not None) and (_loaded_scalers.get(k) is not None)
+        status[k] = "ready" if ok else "not_loaded"
+    return {"status": "ok", "models": status}
+
+
+@app.get("/models/{model_name}/features")
+def get_model_features(model_name: str):
+    if model_name not in MODELS_INFO:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    info = MODELS_INFO[model_name]
+    return {
+        "model": model_name,
+        "features": info["features"],
+        "categorical_mapping": info.get("categorical_mapping", {})
+    }
+
+
+@app.post("/predict")
+async def predict(req: PredictRequest):
+    req_id = str(uuid.uuid4())
+    ts_start = time.time()
+
+    model_key = req.model_name.lower()
+    ensure_model_loaded(model_key)
+
+    keras_model = _loaded_models[model_key]
+    scaler = _loaded_scalers[model_key]
+
+    # Preprocess features
+    features_array, received_features = preprocess_features(model_key, req.features)
+
+    # Scale features
     try:
-        load_models()
-        return jsonify({'message': 'تم إعادة تحميل النماذج بنجاح'})
+        features_scaled = scaler.transform(features_array)
     except Exception as e:
-        return jsonify({'error': str(e)}), 500
+        raise HTTPException(status_code=500, detail=f"Scaler.transform failed: {e}")
+
+    # Predict
+    try:
+        prediction = keras_model.predict(features_scaled, verbose=0)
+        prob = float(prediction.ravel()[0])
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Model prediction failed: {e}")
+
+    # Apply threshold
+    threshold = req.threshold
+    predicted_class = "positive" if prob >= threshold else "negative"
+    risk_level = "high" if prob >= 0.7 else "medium" if prob >= 0.4 else "low"
+
+    ts_end = time.time()
+    processing_ms = int((ts_end - ts_start) * 1000)
+
+    return {
+        "request_id": req_id,
+        "model": model_key,
+        "prediction": {
+            "class": predicted_class,
+            "probability": prob,
+            "risk_level": risk_level,
+            "threshold_used": threshold
+        },
+        "processing_time_ms": processing_ms,
+        "received_features": received_features
+    }
 
 
-if __name__ == '__main__':
-    print("🚀 بدء تشغيل خادم الكشف عن السرطان...")
-    print(f"📂 المسار الأساسي: {BASE_DIR}")
-
-    # التحقق من وجود النماذج
-    for cancer_type, paths in MODEL_PATHS.items():
-        model_exists = os.path.exists(paths['model'])
-        scaler_exists = os.path.exists(paths['scaler'])
-
-        print(f"{'✅' if model_exists else '❌'} {cancer_type} model: {paths['model']}")
-        print(f"{'✅' if scaler_exists else '❌'} {cancer_type} scaler: {paths['scaler']}")
-
-    app.run(host='0.0.0.0', port=5000, debug=True)
+@app.post("/predict/{model_name}")
+async def predict_with_model_name(model_name: str, req: Dict[str, Any]):
+    predict_req = PredictRequest(
+        model_name=model_name,
+        features=req.get("features", {}),
+        threshold=req.get("threshold", 0.3)
+    )
+    return await predict(predict_req)

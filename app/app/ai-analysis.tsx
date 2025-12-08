@@ -325,7 +325,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
   },
   loadingContainer: {
-    alignItems: 'center',
+
+alignItems: 'center',
     marginVertical: 24,
     padding: 20,
   },

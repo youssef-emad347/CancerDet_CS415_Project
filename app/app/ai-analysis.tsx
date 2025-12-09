@@ -73,7 +73,7 @@ interface LungCancerData {
   pack_years: string;
   gender: 'Male' | 'Female';
   radon_exposure: 'High' | 'Low' | 'Unknown';
-  cumulative_smoking:string;
+  cumulative_smoking: string;
   asbestos_exposure: boolean;
   secondhand_smoke_exposure: boolean;
   copd_diagnosis: boolean;
@@ -120,6 +120,7 @@ export default function AiAnalysisScreen() {
   const [selectedCancerType, setSelectedCancerType] = useState<CancerType | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<PredictionResult | null>(null);
+  const [threshold, setThreshold] = useState('0.3');
   
   // بيانات النماذج
   const [breastData, setBreastData] = useState<BreastCancerData>({
@@ -160,7 +161,7 @@ export default function AiAnalysisScreen() {
     pack_years: '66.02524418',
     gender: 'Male',
     radon_exposure: 'High',
-    cumulative_smoking:'4,555.74184842',
+    cumulative_smoking: '4555.74184842',
     asbestos_exposure: false,
     secondhand_smoke_exposure: false,
     copd_diagnosis: true,
@@ -189,38 +190,46 @@ export default function AiAnalysisScreen() {
     setResult(null);
   };
 
-  // دالة لإرسال البيانات للسيرفر
-const sendPredictionRequest = async (modelName: string, features: any) => {
-  try {
-    let endpoint = '';
+  // دالة لإعداد البيانات للإرسال بالشكل المطلوب
+  const prepareRequestData = (modelName: string, features: any) => {
+    return {
+      model_name: modelName,
+      features: features,
+      threshold: parseFloat(threshold)
+    };
+  };
 
-    if (modelName === 'breast') endpoint = '/predict/breast';
-    else if (modelName === 'lung') endpoint = '/predict/lung';
-    else if (modelName === 'colorectal') endpoint = '/predict/colorectal';
+  // دالة لإرسال البيانات للسيرفر بالشكل المطلوب
+  const sendPredictionRequest = async (modelName: string, features: any) => {
+    try {
+      // استخدم نفس الـ endpoint للجميع أو غيره حسب حاجة السيرفر
+      const endpoint = '/predict';
+      
+      // إعداد البيانات بالشكل المطلوب
+      const requestData = prepareRequestData(modelName, features);
+      
+      console.log('Sending request:', JSON.stringify(requestData, null, 2));
+      
+      const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData),
+      });
 
-    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        features: features,
-        threshold: 0.5
-      }),
-    });
+      if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Server error: ${response.status} - ${errorText}`);
+      }
 
-    if (!response.ok) {
-      throw new Error(`Server error: ${response.status}`);
+      const data = await response.json();
+      return data;
+    } catch (error: any) {
+      console.error('Prediction error:', error);
+      throw new Error(`Failed to get prediction: ${error.message}`);
     }
-
-    const data = await response.json();
-    return data;
-  } catch (error: any) {
-    console.error('Prediction error:', error);
-    throw new Error(`Failed to get prediction: ${error.message}`);
-  }
-};
-
+  };
 
   // دالة للتحقق من صحة البيانات قبل الإرسال
   const validateData = (data: any, cancerType: CancerType): boolean => {
@@ -257,6 +266,13 @@ const sendPredictionRequest = async (modelName: string, features: any) => {
         }
         break;
     }
+    
+    // تحقق من صحة الـ threshold
+    if (isNaN(parseFloat(threshold)) || parseFloat(threshold) < 0 || parseFloat(threshold) > 1) {
+      Alert.alert('خطأ في الإعدادات', 'الرجاء إدخال قيمة صحيحة للحد (threshold) بين 0 و 1');
+      return false;
+    }
+    
     return true;
   };
 
@@ -268,32 +284,55 @@ const sendPredictionRequest = async (modelName: string, features: any) => {
 
     // تحقق من صحة البيانات
     let dataToSend: any;
+    let modelName = '';
+    
     switch (selectedCancerType) {
       case 'breast':
         if (!validateData(breastData, 'breast')) return;
+        // تحويل بيانات سرطان الثدي للصيغة المناسبة
         dataToSend = { ...breastData };
+        modelName = 'breast';
         break;
+        
       case 'lung':
         if (!validateData(lungData, 'lung')) return;
-        // تحويل البيانات الرئوية للصيغة المناسبة
+        // تحويل البيانات الرئوية للصيغة المناسبة تماماً كما في المثال
         dataToSend = {
-          ...lungData,
+          age: parseFloat(lungData.age),
+          pack_years: parseFloat(lungData.pack_years),
+          cumulative_smoking: lungData.cumulative_smoking,
+          gender: lungData.gender,
+          radon_exposure: lungData.radon_exposure,
           asbestos_exposure: lungData.asbestos_exposure ? 'Yes' : 'No',
           secondhand_smoke_exposure: lungData.secondhand_smoke_exposure ? 'Yes' : 'No',
           copd_diagnosis: lungData.copd_diagnosis ? 'Yes' : 'No',
+          alcohol_consumption: lungData.alcohol_consumption,
           family_history: lungData.family_history ? 'Yes' : 'No'
         };
+        modelName = 'lung';
         break;
+        
       case 'colorectal':
         if (!validateData(colorectalData, 'colorectal')) return;
         // تحويل بيانات القولون للصيغة المناسبة
         dataToSend = {
-          ...colorectalData,
-          Family_History_CRC: colorectalData.Family_History_CRC ? 'Yes' : 'No',
+          Age: parseFloat(colorectalData.Age),
+          Gender: colorectalData.Gender,
+          BMI: parseFloat(colorectalData.BMI),
+          Lifestyle: colorectalData.Lifestyle,
           Ethnicity: colorectalData.Ethnicity || 'Other',
-          'Pre-existing Conditions': colorectalData['Pre-existing Conditions'] || 'None'
+          Family_History_CRC: colorectalData.Family_History_CRC ? 'Yes' : 'No',
+          'Pre-existing Conditions': colorectalData['Pre-existing Conditions'] || 'None',
+          'Carbohydrates (g)': parseFloat(colorectalData['Carbohydrates (g)']),
+          'Proteins (g)': parseFloat(colorectalData['Proteins (g)']),
+          'Fats (g)': parseFloat(colorectalData['Fats (g)']),
+          'Vitamin A (IU)': parseFloat(colorectalData['Vitamin A (IU)']),
+          'Vitamin C (mg)': parseFloat(colorectalData['Vitamin C (mg)']),
+          'Iron (mg)': parseFloat(colorectalData['Iron (mg)'])
         };
+        modelName = 'colorectal';
         break;
+        
       default:
         return;
     }
@@ -302,7 +341,7 @@ const sendPredictionRequest = async (modelName: string, features: any) => {
     setResult(null);
 
     try {
-      const predictionResult = await sendPredictionRequest(selectedCancerType, dataToSend);
+      const predictionResult = await sendPredictionRequest(modelName, dataToSend);
       setResult(predictionResult);
     } catch (error: any) {
       Alert.alert('خطأ في التحليل', error.message || 'حدث خطأ أثناء الاتصال بالسيرفر');
@@ -422,13 +461,12 @@ const sendPredictionRequest = async (modelName: string, features: any) => {
                 style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface }]}
                 value={lungData.age}
                 onChangeText={(text) =>
-  setLungData(prev => ({
-    ...prev,
-    age: text,
-    cumulative_smoking:
-      (parseFloat(text) || 0) * (parseFloat(prev.pack_years) || 0)
-  }))
-}
+                  setLungData(prev => ({
+                    ...prev,
+                    age: text,
+                    cumulative_smoking: (parseFloat(text) || 0) * (parseFloat(prev.pack_years) || 0)
+                  }))
+                }
                 placeholder="أدخل العمر"
                 keyboardType="numeric"
               />
@@ -440,27 +478,26 @@ const sendPredictionRequest = async (modelName: string, features: any) => {
                 style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface }]}
                 value={lungData.pack_years}
                 onChangeText={(text) =>
-  setLungData(prev => ({
-    ...prev,
-    pack_years: text,
-    cumulative_smoking:
-      (parseFloat(prev.age) || 0) * (parseFloat(text) || 0)
-  }))
-}
+                  setLungData(prev => ({
+                    ...prev,
+                    pack_years: text,
+                    cumulative_smoking: (parseFloat(prev.age) || 0) * (parseFloat(text) || 0)
+                  }))
+                }
                 placeholder="أدخل سنوات التدخين"
                 keyboardType="decimal-pad"
               />
             </View>
+            
             <View style={styles.formRow}>
-  <ThemedText style={styles.inputLabel}>معدل التدخين التراكمي</ThemedText>
-  <TextInput
-    style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface }]}
-    value={lungData.cumulative_smoking?.toString() || "0"}
-    placeholder="0"
-    editable={false} // لأنه محسوب تلقائي
-  />
-</View>
-
+              <ThemedText style={styles.inputLabel}>معدل التدخين التراكمي</ThemedText>
+              <TextInput
+                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface }]}
+                value={lungData.cumulative_smoking.toString()}
+                placeholder="0"
+                editable={false}
+              />
+            </View>
 
             <View style={styles.formRow}>
               <ThemedText style={styles.inputLabel}>الجنس</ThemedText>
@@ -709,6 +746,19 @@ const sendPredictionRequest = async (modelName: string, features: any) => {
     }
   };
 
+  const renderThresholdInput = () => (
+    <View style={styles.thresholdContainer}>
+      <ThemedText style={styles.thresholdLabel}>حد التشخيص (Threshold):</ThemedText>
+      <TextInput
+        style={[styles.thresholdInput, { borderColor: colors.border, backgroundColor: colors.surface }]}
+        value={threshold}
+        onChangeText={setThreshold}
+        placeholder="أدخل قيمة من 0 إلى 1"
+        keyboardType="decimal-pad"
+      />
+    </View>
+  );
+
   // عرض النتيجة بشكل جميل
   const renderResult = () => {
     if (!result) return null;
@@ -793,21 +843,21 @@ const sendPredictionRequest = async (modelName: string, features: any) => {
 
   const isAnalyzeDisabled = !selectedCancerType || analyzing;
 
-return (
-  <>
-    <Stack.Screen options={{ title: t('ai.title') }} />
+  return (
+    <>
+      <Stack.Screen options={{ title: t('ai.title') }} />
 
-    <View style={{ flex: 1 }}>
-      <ThemedView style={styles.container}>
+      <View style={{ flex: 1 }}>
+        <ThemedView style={styles.container}>
 
-        {/* العنوان */}
-        <ThemedText type="title" style={styles.header}>
-          {t('ai.title')}
-        </ThemedText>
+          {/* العنوان */}
+          <ThemedText type="title" style={styles.header}>
+            {t('ai.title')}
+          </ThemedText>
 
-        <ThemedText style={styles.description}>
-          اختر نوع السرطان وأدخل البيانات للحصول على تحليل ذكي
-        </ThemedText>
+          <ThemedText style={styles.description}>
+            اختر نوع السرطان وأدخل البيانات للحصول على تحليل ذكي
+          </ThemedText>
 
           {/* قسم اختيار نوع السرطان */}
           <View style={styles.section}>
@@ -824,94 +874,102 @@ return (
                       backgroundColor: selectedCancerType === cancer.id 
                         ? colors.primary 
                         : colors.surface,
-                    borderColor:
-                      selectedCancerType === cancer.id
+                      borderColor: selectedCancerType === cancer.id
                         ? colors.primary
                         : colors.border,
-                  },
-                ]}
-                onPress={() => handleCancerTypeSelect(cancer.id)}
-                disabled={analyzing}
-              >
-                <ThemedText
-                  style={{
-                    color:
-                      selectedCancerType === cancer.id
+                    },
+                  ]}
+                  onPress={() => handleCancerTypeSelect(cancer.id)}
+                  disabled={analyzing}
+                >
+                  <ThemedText
+                    style={{
+                      color: selectedCancerType === cancer.id
                         ? "white"
                         : colors.text,
-                  }}
-                >
-                  {cancer.label}
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
+                    }}
+                  >
+                    {cancer.label}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
           </View>
-        </View>
 
-        {/* الفورم Scroll فقط */}
-        {selectedCancerType && (
-          <View
-            style={{
-              flex: 1,
-              marginTop: 10,
-              maxHeight: 450, // 🔥 مهم جداً علشان Scroll يشتغل
-            }}
+          {/* إعدادات الـ threshold */}
+          {selectedCancerType && renderThresholdInput()}
 
-          >
-            <ThemedText type="subtitle" style={styles.sectionTitle}>
-              أدخل بيانات{" "}
-              {selectedCancerType === "breast"
-                ? "سرطان الثدي"
-                : selectedCancerType === "colorectal"
-                ? "سرطان القولون"
-                : "سرطان الرئة"}
-            </ThemedText>
-
-            <ScrollView
-              style={{ flex: 1, marginTop: 12 }}
-              contentContainerStyle={{
-                paddingBottom: 120,
+          {/* الفورم Scroll فقط */}
+          {selectedCancerType && (
+            <View
+              style={{
+                flex: 1,
+                marginTop: 10,
+                maxHeight: 400,
               }}
-              nestedScrollEnabled={true}
-              showsVerticalScrollIndicator={true}
             >
-              {renderDataForm()} {/* <-- هنا كل الفيلدز هتظهر */}
-            </ScrollView>
-          </View>
-        )}
+              <ThemedText type="subtitle" style={styles.sectionTitle}>
+                أدخل بيانات{" "}
+                {selectedCancerType === "breast"
+                  ? "سرطان الثدي"
+                  : selectedCancerType === "colorectal"
+                  ? "سرطان القولون"
+                  : "سرطان الرئة"}
+              </ThemedText>
 
-        {/* النتيجة */}
-        {!analyzing && result && renderResult()}
-      </ThemedView>
+              <ScrollView
+                style={{ flex: 1, marginTop: 12 }}
+                contentContainerStyle={{
+                  paddingBottom: 120,
+                }}
+                nestedScrollEnabled={true}
+                showsVerticalScrollIndicator={true}
+              >
+                {renderDataForm()}
+              </ScrollView>
+            </View>
+          )}
 
-      {/* زر التحليل ثابت أسفل الشاشة */}
-      <ThemedView styles={styles.fixedButtonContainer}>
-        <TouchableOpacity
-          style={[
-            styles.analyzeButton,
-            {
-              backgroundColor: !isAnalyzeDisabled
-                ? colors.primary
-                : colors.icon + "40",
-            },
-          ]}
-          onPress={handleAnalyze}
-          disabled={isAnalyzeDisabled}
-        >
-          <IconSymbol
-            name="brain.head.profile"
-            size={24}
-            color="white"
-            style={{ marginRight: 8 }}
-          />
-          <ThemedText style={styles.buttonText}>بدء التحليل</ThemedText>
-        </TouchableOpacity>
-      </ThemedView>
-    </View>
-  </>
-);
+          {/* النتيجة */}
+          {!analyzing && result && renderResult()}
+          
+          {/* Loading indicator */}
+          {analyzing && (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color={colors.primary} />
+              <ThemedText style={{ marginTop: 16, textAlign: 'center' }}>
+                جاري التحليل...
+              </ThemedText>
+            </View>
+          )}
+        </ThemedView>
 
-
+        {/* زر التحليل ثابت أسفل الشاشة */}
+        <ThemedView style={styles.fixedButtonContainer}>
+          <TouchableOpacity
+            style={[
+              styles.analyzeButton,
+              {
+                backgroundColor: !isAnalyzeDisabled
+                  ? colors.primary
+                  : colors.icon + "40",
+              },
+            ]}
+            onPress={handleAnalyze}
+            disabled={isAnalyzeDisabled}
+          >
+            <IconSymbol
+              name="brain.head.profile"
+              size={24}
+              color="white"
+              style={{ marginRight: 8 }}
+            />
+            <ThemedText style={styles.buttonText}>بدء التحليل</ThemedText>
+          </TouchableOpacity>
+        </ThemedView>
+      </View>
+    </>
+  );
 }
 
 const styles = StyleSheet.create({
@@ -953,6 +1011,21 @@ const styles = StyleSheet.create({
   cancerTypeText: {
     fontWeight: '600',
     fontSize: 14,
+  },
+  thresholdContainer: {
+    marginBottom: 20,
+    marginTop: 10,
+  },
+  thresholdLabel: {
+    fontSize: 14,
+    marginBottom: 8,
+    opacity: 0.8,
+  },
+  thresholdInput: {
+    borderWidth: 1,
+    borderRadius: 8,
+    padding: 12,
+    fontSize: 16,
   },
   fullFormContainer: {
     width: '100%',
@@ -1031,6 +1104,7 @@ const styles = StyleSheet.create({
   loadingContainer: {
     marginVertical: 24,
     padding: 20,
+    alignItems: 'center',
   },
   resultContainer: {
     padding: 20,

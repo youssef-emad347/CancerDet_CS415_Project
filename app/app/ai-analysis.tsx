@@ -35,7 +35,8 @@ const getApiBaseUrl = () => {
   }
 
   // Fallback if not in development or hostUri is undefined
-  return 'http://10.247.112.22:8000';
+  // Updated to current local IP:
+  return 'http://192.168.1.13:8000';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -100,7 +101,7 @@ interface ColorectalCancerData {
   Age: string;
   Gender: 'Male' | 'Female';
   BMI: string;
-  Lifestyle: 'Sedentary' | 'Active' | 'Very Active';
+  Lifestyle: 'Sedentary' | 'Active' | 'Very Active' | 'Smoker';
   Ethnicity: string;
   Family_History_CRC: boolean;
   'Pre-existing Conditions': string;
@@ -511,7 +512,7 @@ export default function AiAnalysisScreen() {
             <View style={styles.formRow}>
               <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.radon')}</ThemedText>
               <View style={styles.radioGroup}>
-                {['High', 'Low', 'Unknown'].map((option) => (
+                {['Low', 'Medium', 'High'].map((option) => (
                   <TouchableOpacity
                     key={option}
                     style={[
@@ -524,7 +525,7 @@ export default function AiAnalysisScreen() {
                     onPress={() => setLungData(prev => ({ ...prev, radon_exposure: option as any }))}
                   >
                     <ThemedText style={{ color: lungData.radon_exposure === option ? 'white' : colors.text }}>
-                      {option === 'High' ? t('ai.forms.lung.options.high') : option === 'Low' ? t('ai.forms.lung.options.low') : t('ai.forms.lung.options.unknown')}
+                      {option === 'Low' ? t('ai.forms.lung.options.low') : option === 'Medium' ? t('ai.forms.lung.options.medium') : t('ai.forms.lung.options.high')}
                     </ThemedText>
                   </TouchableOpacity>
                 ))}
@@ -555,7 +556,7 @@ export default function AiAnalysisScreen() {
             <View style={styles.formRow}>
               <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.alcohol')}</ThemedText>
               <View style={styles.radioGroup}>
-                {['None', 'Moderate', 'High'].map((option) => (
+                {['None', 'Moderate', 'Heavy'].map((option) => (
                   <TouchableOpacity
                     key={option}
                     style={[
@@ -638,7 +639,7 @@ export default function AiAnalysisScreen() {
             <View style={styles.formRow}>
               <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.lifestyle')}</ThemedText>
               <View style={styles.radioGroup}>
-                {['Sedentary', 'Active', 'Very Active'].map((option) => (
+                {['Sedentary', 'Moderate', 'Active', 'Smoker'].map((option) => (
                   <TouchableOpacity
                     key={option}
                     style={[
@@ -651,7 +652,7 @@ export default function AiAnalysisScreen() {
                     onPress={() => setColorectalData(prev => ({ ...prev, Lifestyle: option as any }))}
                   >
                     <ThemedText style={{ color: colorectalData.Lifestyle === option ? 'white' : colors.text }}>
-                      {option === 'Sedentary' ? t('ai.forms.colorectal.options.sedentary') : option === 'Active' ? t('ai.forms.colorectal.options.active') : t('ai.forms.colorectal.options.veryActive')}
+                      {option === 'Sedentary' ? t('ai.forms.colorectal.options.sedentary') : option === 'Moderate' ? t('ai.forms.colorectal.options.active') : option === 'Active' ? t('ai.forms.colorectal.options.veryActive') : 'Smoker'}
                     </ThemedText>
                   </TouchableOpacity>
                 ))}
@@ -660,13 +661,48 @@ export default function AiAnalysisScreen() {
 
             <View style={styles.formRow}>
               <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.ethnicity')}</ThemedText>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                value={colorectalData.Ethnicity}
-                onChangeText={(text) => setColorectalData(prev => ({ ...prev, Ethnicity: text }))}
-                placeholder={t('ai.forms.colorectal.placeholders.ethnicity')}
-                placeholderTextColor={colors.icon}
-              />
+              <View style={styles.pickerContainer}>
+                {['African', 'Asian', 'Caucasian', 'Hispanic', 'Other'].map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.chipOption,
+                      {
+                        backgroundColor: colorectalData.Ethnicity === option ? colors.primary : colors.surface,
+                        borderColor: colors.border
+                      }
+                    ]}
+                    onPress={() => setColorectalData(prev => ({ ...prev, Ethnicity: option }))}
+                  >
+                    <ThemedText style={{ color: colorectalData.Ethnicity === option ? 'white' : colors.text, fontSize: 12 }}>
+                      {option}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formRow}>
+              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.conditions')}</ThemedText>
+              <View style={styles.pickerContainer}>
+                {['None', 'Diabetes', 'Other'].map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.chipOption,
+                      {
+                        backgroundColor: colorectalData['Pre-existing Conditions'] === option ? colors.primary : colors.surface,
+                        borderColor: colors.border
+                      }
+                    ]}
+                    onPress={() => setColorectalData(prev => ({ ...prev, 'Pre-existing Conditions': option }))}
+                  >
+                    <ThemedText style={{ color: colorectalData['Pre-existing Conditions'] === option ? 'white' : colors.text, fontSize: 12 }}>
+                      {option}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
             <View style={styles.switchRow}>
@@ -675,17 +711,6 @@ export default function AiAnalysisScreen() {
                 value={colorectalData.Family_History_CRC}
                 onValueChange={(value) => setColorectalData(prev => ({ ...prev, Family_History_CRC: value }))}
                 trackColor={{ false: colors.border, true: colors.primary }}
-              />
-            </View>
-
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.conditions')}</ThemedText>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                value={colorectalData['Pre-existing Conditions']}
-                onChangeText={(text) => setColorectalData(prev => ({ ...prev, 'Pre-existing Conditions': text }))}
-                placeholder={t('ai.forms.colorectal.placeholders.conditions')}
-                placeholderTextColor={colors.icon}
               />
             </View>
           </View>
@@ -1049,6 +1074,18 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderRadius: 20,
     borderWidth: 1,
+  },
+  pickerContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chipOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 4,
   },
   switchRow: {
     flexDirection: 'row',

@@ -1,0 +1,36 @@
+{
+    "radon_exposure": {
+        "Low": 0,
+        "Medium": 1,
+        "High": 2
+    },
+    "alcohol_consumption": {
+        "None": 0,
+        "Moderate": 1,
+        "Heavy": 2
+    },
+    "gender": {
+        "Female": 0,
+        "Male": 1
+    },
+    "asbestos_exposure": {
+        "No": 0,
+        "Yes": 1
+    },
+    "secondhand_smoke_exposure": {
+        "No": 0,
+        "Yes": 1
+    },
+    "copd_diagnosis": {
+        "No": 0,
+        "Yes": 1
+    },
+    "family_history": {
+        "No": 0,
+        "Yes": 1
+    },
+    "lung_cancer": {
+        "No": 0,
+        "Yes": 1
+    }
+}

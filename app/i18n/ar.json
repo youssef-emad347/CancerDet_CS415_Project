@@ -137,7 +137,8 @@
                   "low": "منخفض",
                   "unknown": "غير معروف",
                   "none": "لا يوجد",
-                  "moderate": "معتدل"
+                  "moderate": "معتدل",
+                  "medium": "متوسط"
               }
           },
           "colorectal": {

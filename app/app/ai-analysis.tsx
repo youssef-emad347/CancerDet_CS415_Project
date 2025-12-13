@@ -14,6 +14,7 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
+import * as DocumentPicker from 'expo-document-picker';
 import { useTranslation } from 'react-i18next';
 
 import { ThemedText } from '@/components/themed-text';
@@ -359,11 +360,107 @@ export default function AiAnalysisScreen() {
     }
   };
 
+
+
+  const handlePdfUpload = async (type: CancerType) => {
+      try {
+          const result = await DocumentPicker.getDocumentAsync({
+              type: 'application/pdf',
+              copyToCacheDirectory: true,
+          });
+
+          if (result.canceled) return;
+
+          const fileAsset = result.assets[0];
+          setAnalyzing(true);
+
+          const formData = new FormData();
+          formData.append('type', type);
+          formData.append('file', {
+              uri: fileAsset.uri,
+              name: fileAsset.name,
+              type: 'application/pdf'
+          } as any);
+
+          const response = await fetch(`${API_BASE_URL}/extract-pdf`, {
+              method: 'POST',
+              body: formData,
+              headers: {
+                  'Content-Type': 'multipart/form-data',
+              },
+          });
+
+          if (!response.ok) throw new Error('Failed to extract data');
+          const json = await response.json();
+
+          if (json.status === 'success' && json.data) {
+              const extracted = json.data;
+              let count = 0;
+
+              if (type === 'lung') {
+                  setLungData(prev => {
+                      const newData = { ...prev };
+                      if (extracted.age) newData.age = extracted.age.toString();
+                      if (extracted.packYears) newData.pack_years = extracted.packYears.toString();
+                      if (newData.age && newData.pack_years) {
+                          newData.cumulative_smoking = (parseFloat(newData.age) * parseFloat(newData.pack_years)).toString();
+                      }
+                      return newData;
+                  });
+                  count = Object.keys(extracted).length;
+              }
+              else if (type === 'colorectal') {
+                  setColorectalData(prev => {
+                      const newData = { ...prev };
+                      if (extracted.age) newData.Age = extracted.age.toString();
+                      if (extracted.bmi) newData.BMI = extracted.bmi.toString();
+                      if (extracted.carbs) newData['Carbohydrates (g)'] = extracted.carbs.toString();
+                      if (extracted.proteins) newData['Proteins (g)'] = extracted.proteins.toString();
+                      if (extracted.fats) newData['Fats (g)'] = extracted.fats.toString();
+                      if (extracted.vitA) newData['Vitamin A (IU)'] = extracted.vitA.toString();
+                      return newData;
+                  });
+                  count = Object.keys(extracted).length;
+              }
+              else if (type === 'breast') {
+                  setBreastData(prev => {
+                       const newData = { ...prev };
+                       Object.keys(extracted).forEach(key => {
+                           if (key in newData) {
+                               // @ts-ignore
+                               newData[key] = extracted[key].toString();
+                           }
+                       });
+                       return newData;
+                  });
+                  count = Object.keys(extracted).length;
+              }
+
+              Alert.alert(t('home.aiPrediction'), `Extracted data from Report!`);
+          }
+
+      } catch (error: any) {
+          Alert.alert('Error', 'Failed to process PDF: ' + error.message);
+      } finally {
+          setAnalyzing(false);
+      }
+  };
+
   const renderBreastCancerForm = () => (
     <View style={styles.fullFormContainer}>
       <ThemedText type="subtitle" style={styles.formTitle}>{t('ai.forms.breast.title')}</ThemedText>
       <ThemedText style={styles.formSubtitle}>{t('ai.forms.breast.subtitle')}</ThemedText>
       
+      <TouchableOpacity 
+        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]} 
+        onPress={() => handlePdfUpload('breast')}
+      >
+        <IconSymbol name="doc.text" size={20} color="white" style={{ marginRight: 8 }} />
+        <ThemedText style={{ color: 'white', fontWeight: '600' }}>
+          {t('ai.forms.uploadPdf', 'Upload Medical Report (PDF)')}
+        </ThemedText>
+      </TouchableOpacity>
+
       <View style={styles.formGrid}>
           {/* Group 1: Mean Features */}
           <View style={styles.featureGroup}>
@@ -435,6 +532,16 @@ export default function AiAnalysisScreen() {
     <View style={styles.fullFormContainer}>
       <ThemedText type="subtitle" style={styles.formTitle}>{t('ai.forms.lung.title')}</ThemedText>
       
+      <TouchableOpacity 
+        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]} 
+        onPress={() => handlePdfUpload('lung')}
+      >
+        <IconSymbol name="doc.text" size={20} color="white" style={{ marginRight: 8 }} />
+        <ThemedText style={{ color: 'white', fontWeight: '600' }}>
+          {t('ai.forms.uploadPdf', 'Upload Medical Report (PDF)')}
+        </ThemedText>
+      </TouchableOpacity>
+
       <View style={styles.formGrid}>
           {/* المعلومات الأساسية */}
           <View style={styles.featureGroup}>
@@ -584,6 +691,16 @@ export default function AiAnalysisScreen() {
     <View style={styles.fullFormContainer}>
       <ThemedText type="subtitle" style={styles.formTitle}>{t('ai.forms.colorectal.title')}</ThemedText>
       
+      <TouchableOpacity 
+        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]} 
+        onPress={() => handlePdfUpload('colorectal')}
+      >
+        <IconSymbol name="doc.text" size={20} color="white" style={{ marginRight: 8 }} />
+        <ThemedText style={{ color: 'white', fontWeight: '600' }}>
+          {t('ai.forms.uploadPdf', 'Upload Medical Report (PDF)')}
+        </ThemedText>
+      </TouchableOpacity>
+
       <View style={styles.formGrid}>
           {/* المعلومات الشخصية */}
           <View style={styles.featureGroup}>
@@ -1194,5 +1311,18 @@ const styles = StyleSheet.create({
     top: 16,
     right: 16,
     zIndex: 1,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
   },
 });

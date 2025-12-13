@@ -213,6 +213,11 @@ class LogRequestMiddleware(BaseHTTPMiddleware):
 
 app.add_middleware(LogRequestMiddleware)
 
+
+
+# ---------------------------------------------------------
+# 🟦 PREDICTION ENDPOINT
+# ---------------------------------------------------------
 @app.post("/predict")
 async def predict(req: PredictRequest):
     req_id = str(uuid.uuid4())
@@ -245,3 +250,108 @@ async def predict(req: PredictRequest):
             "risk_level": risk
         }
     }
+
+# ---------------------------------------------------------
+# 🟦 PDF EXTRACTION ENDPOINT
+# ---------------------------------------------------------
+# ---------------------------------------------------------
+# 🟦 PDF EXTRACTION ENDPOINT
+# ---------------------------------------------------------
+from fastapi import UploadFile, File, Form
+from fastapi.concurrency import run_in_threadpool
+from pypdf import PdfReader
+from thefuzz import fuzz
+import io
+import re
+
+# NOTE: This must be SYNC to run in threadpool efficiently
+def extract_text_from_pdf_sync(file_bytes):
+    try:
+        print("   Starting PDF text extraction...")
+        reader = PdfReader(io.BytesIO(file_bytes))
+        text = ""
+        for i, page in enumerate(reader.pages):
+            text += page.extract_text() + "\n"
+        print(f"   Extracted {len(text)} chars from {len(reader.pages)} pages.")
+        return text
+    except Exception as e:
+        print(f"   ❌ PDF Read Error: {e}")
+        return ""
+
+def fuzzy_extract(text, keys, is_numeric=True):
+    """
+    Finds a line containing one of the 'keys' with high fuzzy ratio,
+    then regex-extracts the number value from that line.
+    """
+    lines = text.split('\n')
+    best_score = 0
+    best_val = None
+
+    for line in lines:
+        for key in keys:
+            token_ratio = fuzz.partial_ratio(key.lower(), line.lower())
+            
+            if token_ratio > 85: # High confidence match
+                matches = re.findall(r"[-+]?\d*\.\d+|\d+", line)
+                if matches:
+                    val = float(matches[-1]) 
+                    if token_ratio > best_score:
+                        best_score = token_ratio
+                        best_val = val
+    
+    return best_val
+
+def process_pdf_logic(type: str, file_bytes: bytes):
+    text = extract_text_from_pdf_sync(file_bytes)
+    
+    # 1. Validation (Is it medical?)
+    valid_keywords = ["report", "lab", "analysis", "patient", "medical", "blood", "scan", "diagnosis"]
+    valid_score = 0
+    for kw in valid_keywords:
+        if kw in text.lower():
+            valid_score += 1
+            
+    if valid_score < 2:
+        print("   ⚠️ Low confidence that this is a medical report")
+
+    extracted_data = {}
+
+    # 2. Extraction Logic based on Type
+    print(f"   Extracting features for {type}...")
+    if type == "lung":
+        # Lung Keys: Age, Pack Years, Radon...
+        extracted_data["age"] = fuzzy_extract(text, ["Age", "Patient Age", "DOB", "Years old"])
+        extracted_data["packYears"] = fuzzy_extract(text, ["Pack Years", "Smoking History", "Packs per day"])
+        
+    elif type == "colorectal":
+        extracted_data["age"] = fuzzy_extract(text, ["Age", "Years old"])
+        extracted_data["bmi"] = fuzzy_extract(text, ["BMI", "Body Mass Index"])
+        extracted_data["carbs"] = fuzzy_extract(text, ["Carbohydrates", "Carbs"])
+        extracted_data["proteins"] = fuzzy_extract(text, ["Proteins", "Protein"])
+        extracted_data["fats"] = fuzzy_extract(text, ["Fats", "Fat"])
+        extracted_data["vitA"] = fuzzy_extract(text, ["Vitamin A", "Vit A"])
+        
+    elif type == "breast":
+        features = MODELS_INFO["breast"]["features"]
+        for f in features:
+            human_name = f.replace("_", " ")
+            val = fuzzy_extract(text, [human_name])
+            if val is not None:
+                extracted_data[f] = val
+
+    print(f"   ✅ Extraction Complete: {extracted_data}")
+    return {"status": "success", "data": extracted_data, "text_preview": text[:200]}
+
+@app.post("/extract-pdf")
+async def extract_pdf(type: str = Form(...), file: UploadFile = File(...)):
+    print(f"📄 Processing PDF Upload for {type}...")
+    
+    # Read content asynchronously (IO bound)
+    content = await file.read()
+    
+    # Run CPU-bound extraction in a separate thread to avoid blocking server
+    result = await run_in_threadpool(process_pdf_logic, type, content)
+    
+    return result
+
+

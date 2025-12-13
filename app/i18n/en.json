@@ -137,7 +137,8 @@
                   "low": "Low",
                   "unknown": "Unknown",
                   "none": "None",
-                  "moderate": "Moderate"
+                  "moderate": "Moderate",
+                  "medium": "Medium"
               }
           },
           "colorectal": {

@@ -1,0 +1,28 @@
+{
+    "Gender": {
+        "Female": 0,
+        "Male": 1
+    },
+    "Lifestyle": {
+        "Active": 0,
+        "Moderate Exercise": 1,
+        "Sedentary": 2,
+        "Smoker": 3
+    },
+    "Ethnicity": {
+        "African American": 0,
+        "Asian": 1,
+        "Caucasian": 2,
+        "Hispanic": 3
+    },
+    "Family_History_CRC": {
+        "No": 0,
+        "Yes": 1
+    },
+    "Pre-existing Conditions": {
+        "Diabetes": 0,
+        "Hypertension": 1,
+        "Obesity": 2,
+        "nan": 3
+    }
+}

@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { onAuthStateChanged, User, signOut as firebaseSignOut } from 'firebase/auth';
-import { auth } from '../config/firebase';
-import { getUserProfile, createUserProfile } from '../services/user';
+import { doc, onSnapshot, setDoc } from 'firebase/firestore'; 
+import { auth, db } from '../config/firebase';
 import { UserProfile, UserRole } from '../types/user';
 import { useRouter, useSegments } from 'expo-router';
 
@@ -32,47 +32,49 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const segments = useSegments();
 
+  // 1. Monitor Auth State
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-      if (firebaseUser) {
-        setUser(firebaseUser);
-        try {
-           // Ensure token is fresh
-           await firebaseUser.getIdToken();
-           // 1. Try to fetch profile
-           let profile = await getUserProfile(firebaseUser.uid);
-           console.log(profile)
-           
-           // 2. If no profile exists (new user race condition or first login), create default
-           if (!profile) {
-               console.log("No profile found, creating default...");
-               const newProfile: any = {
-                   uid: firebaseUser.uid,
-                   email: firebaseUser.email!,
-                   displayName: firebaseUser.displayName || 'User',
-                   role: 'patient', // Default to patient
-                   createdAt: Date.now(),
-                   medicalHistory: []
-               };
-               await createUserProfile(newProfile);
-               profile = newProfile;
-           }
-
-           if (profile) {
-             setUserProfile(profile);
-           }
-        } catch (error) {
-          console.error("Failed to fetch/create user profile", error);
-        }
-      } else {
-        setUser(null);
-        setUserProfile(null);
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser);
+      if (!firebaseUser) {
+          setUserProfile(null);
+          setIsLoading(false);
       }
-      setIsLoading(false);
     });
-
     return unsubscribe;
   }, []);
+
+  // 2. Monitor Profile Data (Real-time)
+  useEffect(() => {
+     if (!user) return;
+
+     const userRef = doc(db, 'users', user.uid);
+     const unsubscribeProfile = onSnapshot(userRef, async (docSnap) => {
+         if (docSnap.exists()) {
+             setUserProfile(docSnap.data() as UserProfile);
+         } else {
+             // Profile missing? Create default.
+             console.log("No profile found, creating default...");
+             const newProfile: any = {
+                 uid: user.uid,
+                 email: user.email!,
+                 displayName: user.displayName || 'User',
+                 role: 'patient',
+                 createdAt: Date.now(),
+                 medicalHistory: [],
+                 stats: { patientCount: 0, pendingReports: 0 } // Initialize stats
+             };
+             await setDoc(userRef, newProfile);
+             // Snapshot will fire again after setDoc, updating state.
+         }
+         setIsLoading(false);
+     }, (error) => {
+         console.error("Profile listener error:", error);
+         setIsLoading(false);
+     });
+
+     return () => unsubscribeProfile();
+  }, [user]);
 
   // Protected Routes Logic
   useEffect(() => {
@@ -87,12 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     // Scenario 2: Logged in and in auth group -> Redirect to home IF userProfile is loaded
     else if (user && userProfile && inAuthGroup) {
       router.replace('/(tabs)');
-    }
-    // Scenario 3: Logged in (Firebase) but userProfile failed to load and not in auth group -> Force logout/redirect to login
-    else if (user && !userProfile && !inAuthGroup) {
-        console.warn("User logged in but profile not found. Forcing logout.");
-        firebaseSignOut(auth); // Force sign out if profile is missing
-        router.replace('/(auth)/login');
     }
   }, [user, userProfile, segments, isLoading]);
 
@@ -115,3 +111,4 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     </AuthContext.Provider>
   );
 }
+

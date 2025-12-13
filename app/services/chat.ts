@@ -16,6 +16,7 @@ import {
   import { db } from '@/config/firebase';
   import { Chat, ChatMessage } from '@/types/chat';
   import { UserProfile } from '@/types/user';
+  import { incrementPatientCount, updateUserProfile } from './user';
   
   // Create or Get a Chat between two users
   export const createOrGetChat = async (currentUser: UserProfile, otherUser: UserProfile): Promise<string> => {
@@ -46,11 +47,20 @@ import {
           { uid: currentUser.uid, displayName: currentUser.displayName, photoURL: currentUser.photoURL || null },
           { uid: otherUser.uid, displayName: otherUser.displayName, photoURL: otherUser.photoURL || null }
         ],
-        updatedAt: Date.now(), // Use client-side timestamp for now to avoid server timestamp type issues in initial render
+        updatedAt: Date.now(),
         createdAt: Date.now(),
       };
   
       const docRef = await addDoc(chatsRef, newChatData);
+      
+      // 3. New Connection Logic
+      // If we are connecting to a doctor, increment their patient count and link them
+      if (otherUser.role === 'doctor' && currentUser.role === 'patient') {
+          await incrementPatientCount(otherUser.uid);
+          // Link patient to doctor for reporting
+          await updateUserProfile(currentUser.uid, { linkedDoctorId: otherUser.uid });
+      }
+
       return docRef.id;
   
     } catch (error) {
@@ -58,6 +68,8 @@ import {
       throw error;
     }
   };
+  
+
   
   // Subscribe to list of chats for a user
   export const subscribeToChats = (uid: string, callback: (chats: Chat[]) => void) => {

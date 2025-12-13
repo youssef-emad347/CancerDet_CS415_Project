@@ -14,7 +14,10 @@ import {
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
+import * as DocumentPicker from 'expo-document-picker';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/context/auth';
+import { incrementPendingReports } from '@/services/user';
 
 import { ThemedText } from '@/components/themed-text';
 import { ThemedView } from '@/components/themed-view';
@@ -35,7 +38,8 @@ const getApiBaseUrl = () => {
   }
 
   // Fallback if not in development or hostUri is undefined
-  return 'http://10.247.112.22:8000';
+  // Updated to current local IP:
+  return 'http://192.168.1.13:8000';
 };
 
 const API_BASE_URL = getApiBaseUrl();
@@ -100,7 +104,7 @@ interface ColorectalCancerData {
   Age: string;
   Gender: 'Male' | 'Female';
   BMI: string;
-  Lifestyle: 'Sedentary' | 'Active' | 'Very Active';
+  Lifestyle: 'Sedentary' | 'Active' | 'Very Active' | 'Smoker';
   Ethnicity: string;
   Family_History_CRC: boolean;
   'Pre-existing Conditions': string;
@@ -127,6 +131,7 @@ interface PredictionResult {
 
 export default function AiAnalysisScreen() {
   const { t } = useTranslation();
+  const { userProfile } = useAuth();
   const colorScheme = useColorScheme();
   const theme = colorScheme ?? 'light';
   // @ts-ignore
@@ -358,11 +363,132 @@ export default function AiAnalysisScreen() {
     }
   };
 
+
+
+  const handlePdfUpload = async (type: CancerType) => {
+      try {
+          const result = await DocumentPicker.getDocumentAsync({
+              type: 'application/pdf',
+              copyToCacheDirectory: true,
+          });
+
+          if (result.canceled) return;
+
+          const fileAsset = result.assets[0];
+          setAnalyzing(true);
+
+          const formData = new FormData();
+          formData.append('type', type);
+          formData.append('file', {
+              uri: fileAsset.uri,
+              name: fileAsset.name,
+              type: 'application/pdf'
+          } as any);
+
+          const response = await fetch(`${API_BASE_URL}/extract-pdf`, {
+              method: 'POST',
+              body: formData,
+              headers: {
+                  'Content-Type': 'multipart/form-data',
+              },
+          });
+
+          if (!response.ok) throw new Error('Failed to extract data');
+          const json = await response.json();
+
+          if (json.status === 'success' && json.data) {
+              const extracted = json.data;
+              let count = 0;
+
+              if (type === 'lung') {
+                  setLungData(prev => {
+                      const newData = { ...prev };
+                      if (extracted.age) newData.age = extracted.age.toString();
+                      if (extracted.packYears) newData.pack_years = extracted.packYears.toString();
+                      if (newData.age && newData.pack_years) {
+                          newData.cumulative_smoking = (parseFloat(newData.age) * parseFloat(newData.pack_years)).toString();
+                      }
+                      
+                      // Categorical & Boolean
+                      if (extracted.gender) newData.gender = extracted.gender;
+                      if (extracted.radon_exposure) newData.radon_exposure = extracted.radon_exposure;
+                      if (extracted.alcohol_consumption) newData.alcohol_consumption = extracted.alcohol_consumption;
+                      if (extracted.family_history !== undefined) newData.family_history = extracted.family_history;
+                      if (extracted.asbestos_exposure !== undefined) newData.asbestos_exposure = extracted.asbestos_exposure;
+                      if (extracted.secondhand_smoke_exposure !== undefined) newData.secondhand_smoke_exposure = extracted.secondhand_smoke_exposure;
+                      if (extracted.copd_diagnosis !== undefined) newData.copd_diagnosis = extracted.copd_diagnosis;
+
+                      return newData;
+                  });
+                  count = Object.keys(extracted).length;
+              }
+              else if (type === 'colorectal') {
+                  setColorectalData(prev => {
+                      const newData = { ...prev };
+                      if (extracted.age) newData.Age = extracted.age.toString();
+                      if (extracted.bmi) newData.BMI = extracted.bmi.toString();
+                      
+                      // Categorical
+                      if (extracted.gender) newData.Gender = extracted.gender;
+                      if (extracted.lifestyle) newData.Lifestyle = extracted.lifestyle;
+                      if (extracted.family_history !== undefined) newData.Family_History_CRC = extracted.family_history;
+
+                      if (extracted.carbs) newData['Carbohydrates (g)'] = extracted.carbs.toString();
+                      if (extracted.proteins) newData['Proteins (g)'] = extracted.proteins.toString();
+                      if (extracted.fats) newData['Fats (g)'] = extracted.fats.toString();
+                      if (extracted.vitA) newData['Vitamin A (IU)'] = extracted.vitA.toString();
+                      if (extracted.vitC) newData['Vitamin C (mg)'] = extracted.vitC.toString();
+                      if (extracted.iron) newData['Iron (mg)'] = extracted.iron.toString();
+                      return newData;
+                  });
+                  count = Object.keys(extracted).length;
+              }
+              else if (type === 'breast') {
+                  setBreastData(prev => {
+                       const newData = { ...prev };
+                       Object.keys(extracted).forEach(key => {
+                           if (key in newData) {
+                               // @ts-ignore
+                               newData[key] = extracted[key].toString();
+                           }
+                       });
+                       return newData;
+                   });
+                   count = Object.keys(extracted).length;
+              }
+
+              // Notify Linked Doctor
+              if (userProfile?.linkedDoctorId) {
+                  await incrementPendingReports(userProfile.linkedDoctorId);
+              }
+
+              Alert.alert('Success', `Extracted ${count} values from report.`);
+          } else {
+              Alert.alert('Analysis Failed', 'Could not extract valid data.');
+          }
+
+      } catch (error: any) {
+          Alert.alert('Error', 'Failed to process PDF: ' + error.message);
+      } finally {
+          setAnalyzing(false);
+      }
+  };
+
   const renderBreastCancerForm = () => (
     <View style={styles.fullFormContainer}>
       <ThemedText type="subtitle" style={styles.formTitle}>{t('ai.forms.breast.title')}</ThemedText>
       <ThemedText style={styles.formSubtitle}>{t('ai.forms.breast.subtitle')}</ThemedText>
       
+      <TouchableOpacity 
+        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]} 
+        onPress={() => handlePdfUpload('breast')}
+      >
+        <IconSymbol name="doc.text" size={20} color="white" style={{ marginRight: 8 }} />
+        <ThemedText style={{ color: 'white', fontWeight: '600' }}>
+          {t('ai.forms.uploadPdf', 'Upload Medical Report (PDF)')}
+        </ThemedText>
+      </TouchableOpacity>
+
       <View style={styles.formGrid}>
           {/* Group 1: Mean Features */}
           <View style={styles.featureGroup}>
@@ -434,6 +560,16 @@ export default function AiAnalysisScreen() {
     <View style={styles.fullFormContainer}>
       <ThemedText type="subtitle" style={styles.formTitle}>{t('ai.forms.lung.title')}</ThemedText>
       
+      <TouchableOpacity 
+        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]} 
+        onPress={() => handlePdfUpload('lung')}
+      >
+        <IconSymbol name="doc.text" size={20} color="white" style={{ marginRight: 8 }} />
+        <ThemedText style={{ color: 'white', fontWeight: '600' }}>
+          {t('ai.forms.uploadPdf', 'Upload Medical Report (PDF)')}
+        </ThemedText>
+      </TouchableOpacity>
+
       <View style={styles.formGrid}>
           {/* المعلومات الأساسية */}
           <View style={styles.featureGroup}>
@@ -448,7 +584,7 @@ export default function AiAnalysisScreen() {
                   setLungData(prev => ({
                     ...prev,
                     age: text,
-                    cumulative_smoking: (parseFloat(text) || 0) * (parseFloat(prev.pack_years) || 0)
+                    cumulative_smoking: ((parseFloat(text) || 0) * (parseFloat(prev.pack_years) || 0)).toString()
                   }))
                 }
                 placeholder={t('ai.forms.lung.placeholders.age')}
@@ -466,7 +602,7 @@ export default function AiAnalysisScreen() {
                   setLungData(prev => ({
                     ...prev,
                     pack_years: text,
-                    cumulative_smoking: (parseFloat(prev.age) || 0) * (parseFloat(text) || 0)
+                    cumulative_smoking: ((parseFloat(prev.age) || 0) * (parseFloat(text) || 0)).toString()
                   }))
                 }
                 placeholder={t('ai.forms.lung.placeholders.packYears')}
@@ -511,7 +647,7 @@ export default function AiAnalysisScreen() {
             <View style={styles.formRow}>
               <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.radon')}</ThemedText>
               <View style={styles.radioGroup}>
-                {['High', 'Low', 'Unknown'].map((option) => (
+                {['Low', 'Medium', 'High'].map((option) => (
                   <TouchableOpacity
                     key={option}
                     style={[
@@ -524,7 +660,7 @@ export default function AiAnalysisScreen() {
                     onPress={() => setLungData(prev => ({ ...prev, radon_exposure: option as any }))}
                   >
                     <ThemedText style={{ color: lungData.radon_exposure === option ? 'white' : colors.text }}>
-                      {option === 'High' ? t('ai.forms.lung.options.high') : option === 'Low' ? t('ai.forms.lung.options.low') : t('ai.forms.lung.options.unknown')}
+                      {option === 'Low' ? t('ai.forms.lung.options.low') : option === 'Medium' ? t('ai.forms.lung.options.medium') : t('ai.forms.lung.options.high')}
                     </ThemedText>
                   </TouchableOpacity>
                 ))}
@@ -555,7 +691,7 @@ export default function AiAnalysisScreen() {
             <View style={styles.formRow}>
               <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.alcohol')}</ThemedText>
               <View style={styles.radioGroup}>
-                {['None', 'Moderate', 'High'].map((option) => (
+                {['None', 'Moderate', 'Heavy'].map((option) => (
                   <TouchableOpacity
                     key={option}
                     style={[
@@ -583,6 +719,16 @@ export default function AiAnalysisScreen() {
     <View style={styles.fullFormContainer}>
       <ThemedText type="subtitle" style={styles.formTitle}>{t('ai.forms.colorectal.title')}</ThemedText>
       
+      <TouchableOpacity 
+        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]} 
+        onPress={() => handlePdfUpload('colorectal')}
+      >
+        <IconSymbol name="doc.text" size={20} color="white" style={{ marginRight: 8 }} />
+        <ThemedText style={{ color: 'white', fontWeight: '600' }}>
+          {t('ai.forms.uploadPdf', 'Upload Medical Report (PDF)')}
+        </ThemedText>
+      </TouchableOpacity>
+
       <View style={styles.formGrid}>
           {/* المعلومات الشخصية */}
           <View style={styles.featureGroup}>
@@ -638,7 +784,7 @@ export default function AiAnalysisScreen() {
             <View style={styles.formRow}>
               <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.lifestyle')}</ThemedText>
               <View style={styles.radioGroup}>
-                {['Sedentary', 'Active', 'Very Active'].map((option) => (
+                {['Sedentary', 'Moderate', 'Active', 'Smoker'].map((option) => (
                   <TouchableOpacity
                     key={option}
                     style={[
@@ -651,7 +797,7 @@ export default function AiAnalysisScreen() {
                     onPress={() => setColorectalData(prev => ({ ...prev, Lifestyle: option as any }))}
                   >
                     <ThemedText style={{ color: colorectalData.Lifestyle === option ? 'white' : colors.text }}>
-                      {option === 'Sedentary' ? t('ai.forms.colorectal.options.sedentary') : option === 'Active' ? t('ai.forms.colorectal.options.active') : t('ai.forms.colorectal.options.veryActive')}
+                      {option === 'Sedentary' ? t('ai.forms.colorectal.options.sedentary') : option === 'Moderate' ? t('ai.forms.colorectal.options.active') : option === 'Active' ? t('ai.forms.colorectal.options.veryActive') : 'Smoker'}
                     </ThemedText>
                   </TouchableOpacity>
                 ))}
@@ -660,13 +806,48 @@ export default function AiAnalysisScreen() {
 
             <View style={styles.formRow}>
               <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.ethnicity')}</ThemedText>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                value={colorectalData.Ethnicity}
-                onChangeText={(text) => setColorectalData(prev => ({ ...prev, Ethnicity: text }))}
-                placeholder={t('ai.forms.colorectal.placeholders.ethnicity')}
-                placeholderTextColor={colors.icon}
-              />
+              <View style={styles.pickerContainer}>
+                {['African', 'Asian', 'Caucasian', 'Hispanic', 'Other'].map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.chipOption,
+                      {
+                        backgroundColor: colorectalData.Ethnicity === option ? colors.primary : colors.surface,
+                        borderColor: colors.border
+                      }
+                    ]}
+                    onPress={() => setColorectalData(prev => ({ ...prev, Ethnicity: option }))}
+                  >
+                    <ThemedText style={{ color: colorectalData.Ethnicity === option ? 'white' : colors.text, fontSize: 12 }}>
+                      {option}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            <View style={styles.formRow}>
+              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.conditions')}</ThemedText>
+              <View style={styles.pickerContainer}>
+                {['None', 'Diabetes', 'Other'].map((option) => (
+                  <TouchableOpacity
+                    key={option}
+                    style={[
+                      styles.chipOption,
+                      {
+                        backgroundColor: colorectalData['Pre-existing Conditions'] === option ? colors.primary : colors.surface,
+                        borderColor: colors.border
+                      }
+                    ]}
+                    onPress={() => setColorectalData(prev => ({ ...prev, 'Pre-existing Conditions': option }))}
+                  >
+                    <ThemedText style={{ color: colorectalData['Pre-existing Conditions'] === option ? 'white' : colors.text, fontSize: 12 }}>
+                      {option}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
             </View>
 
             <View style={styles.switchRow}>
@@ -675,17 +856,6 @@ export default function AiAnalysisScreen() {
                 value={colorectalData.Family_History_CRC}
                 onValueChange={(value) => setColorectalData(prev => ({ ...prev, Family_History_CRC: value }))}
                 trackColor={{ false: colors.border, true: colors.primary }}
-              />
-            </View>
-
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.conditions')}</ThemedText>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                value={colorectalData['Pre-existing Conditions']}
-                onChangeText={(text) => setColorectalData(prev => ({ ...prev, 'Pre-existing Conditions': text }))}
-                placeholder={t('ai.forms.colorectal.placeholders.conditions')}
-                placeholderTextColor={colors.icon}
               />
             </View>
           </View>
@@ -743,7 +913,7 @@ export default function AiAnalysisScreen() {
     const resultColor = isPositive ? colors.error : colors.success;
     const riskLevelColors: Record<string, string> = {
       high: colors.error,
-      medium: colors.warning,
+      medium: colors.accent,
       low: colors.success
     };
 
@@ -1050,6 +1220,18 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     borderWidth: 1,
   },
+  pickerContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  chipOption: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    marginBottom: 4,
+  },
   switchRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -1157,5 +1339,18 @@ const styles = StyleSheet.create({
     top: 16,
     right: 16,
     zIndex: 1,
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+    borderRadius: 8,
+    marginBottom: 16,
+    elevation: 2,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.2,
+    shadowRadius: 1,
   },
 });

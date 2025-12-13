@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { StyleSheet, TextInput, TouchableOpacity, Alert, ScrollView, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { Image } from 'expo-image';
 import { useRouter } from 'expo-router';
 import { useForm, Controller } from 'react-hook-form';
 import { z } from 'zod';
@@ -62,12 +63,20 @@ export default function EditProfileScreen() {
     }
   });
 
+  const [selectedAvatar, setSelectedAvatar] = useState(userProfile?.photoURL || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png');
+  
+  // Generic / Icon Options
+  const AVATAR_OPTIONS = [
+      'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png'
+  ];
+
   const onSubmit = async (data: ProfileFormValues) => {
     if (!user) return;
     setLoading(true);
     try {
       const updateData: any = {
         displayName: data.displayName,
+        photoURL: selectedAvatar,
       };
 
       if (isDoctor) {
@@ -99,7 +108,35 @@ export default function EditProfileScreen() {
             <ThemedText type="title" style={styles.header}>Edit Profile</ThemedText>
 
             <View style={styles.form}>
+                
+                {/* Avatar Selection */}
                 <View style={styles.field}>
+                    <ThemedText style={styles.label}>Choose Avatar</ThemedText>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.avatarList}>
+                        {AVATAR_OPTIONS.map((uri, index) => (
+                            <TouchableOpacity 
+                                key={index} 
+                                onPress={() => setSelectedAvatar(uri)}
+                                style={[
+                                    styles.avatarOption, 
+                                    selectedAvatar === uri && { borderColor: Colors[theme].tint, borderWidth: 3 }
+                                ]}
+                            >
+                                {/* We use View/Image for avatar preview. Assuming React Native Image or Expo Image */}
+                                <View style={{ width: 80, height: 80, borderRadius: 40, overflow: 'hidden', backgroundColor: '#ddd' }}>
+                                     <Image
+                                        source={{ uri }}
+                                        style={{ width: '100%', height: '100%' }}
+                                        contentFit="cover"
+                                     />
+                                </View>
+                            </TouchableOpacity>
+                        ))}
+                    </ScrollView>
+                </View>
+
+                <View style={styles.field}>
+
                     <ThemedText style={styles.label}>Display Name</ThemedText>
                     <Controller
                         control={control}
@@ -262,4 +299,14 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
   },
+  avatarList: {
+      gap: 12,
+      paddingBottom: 8,
+  },
+  avatarOption: {
+      borderRadius: 34,
+      padding: 2,
+      borderWidth: 1,
+      borderColor: 'transparent',
+  }
 });

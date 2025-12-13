@@ -7,14 +7,20 @@ export interface UserProfile {
   role: UserRole;
   photoURL?: string;
   createdAt: number; // Timestamp
+  stats?: {
+      patientCount: number;
+      pendingReports: number;
+  };
+  linkedDoctorId?: string; // For patients linked to a doctor
 }
 
 export interface PatientProfile extends UserProfile {
   role: 'patient';
   medicalHistory?: string[];
   dateOfBirth?: string;
-  primaryPhysicianId?: string;
-  doctorId?: string; // Explicitly requested field
+  primaryPhysicianId?: string; // Legacy/Alt
+  healthScore?: number;
+  nextVisit?: string;
 }
 
 export interface DoctorProfile extends UserProfile {

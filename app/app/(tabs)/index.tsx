@@ -4,6 +4,7 @@ import * as DocumentPicker from 'expo-document-picker';
 import { useState } from 'react';
 import { useRouter } from 'expo-router';
 import { useTranslation } from 'react-i18next';
+import * as Clipboard from 'expo-clipboard';
 
 import ParallaxScrollView from '@/components/parallax-scroll-view';
 import { ThemedText } from '@/components/themed-text';
@@ -29,10 +30,9 @@ export default function HomeScreen() {
   const [codeModalVisible, setCodeModalVisible] = useState(false);
 
   // Mock Data
-  const recentActivity = [
-    { id: '1', title: 'Consultation with Dr. Smith', subtitle: 'General Checkup', date: 'Oct 24', icon: 'stethoscope' },
-    { id: '2', title: 'Blood Test Results', subtitle: 'Pending Review', date: 'Sep 15', icon: 'doc.text.fill' },
-    { id: '3', title: t('home.recentPrescription'), subtitle: 'Dr. Sarah Wilson', date: 'Dec 07', icon: 'doc.text' },
+  // Mock Data (Empty for now until real activity logic is added)
+  const recentActivity: any[] = [
+    // { id: '1', title: 'Consultation with Dr. Smith', subtitle: 'General Checkup', date: 'Oct 24', icon: 'stethoscope' },
   ];
 
   const upcomingAppointments = [
@@ -115,10 +115,21 @@ export default function HomeScreen() {
               {t('profile.shareCodeDesc')}
             </ThemedText>
             
-            <View style={[styles.codeDisplay, { borderColor: colors.primary, backgroundColor: colors.primary + '10' }]}>
+            <TouchableOpacity 
+              style={[styles.codeDisplay, { borderColor: colors.primary, backgroundColor: colors.primary + '10' }]}
+              onPress={async () => {
+                  // @ts-ignore
+                  const code = userProfile?.doctorCode;
+                  if (code) {
+                      await Clipboard.setStringAsync(code);
+                      Alert.alert('Copied', 'Doctor code copied to clipboard');
+                  }
+              }}
+            >
               {/* @ts-ignore */}
               <ThemedText type="title" style={{ color: colors.primary, letterSpacing: 2 }}>{userProfile?.doctorCode || '----'}</ThemedText>
-            </View>
+              <ThemedText style={{ fontSize: 10, opacity: 0.6, textAlign: 'center', marginTop: 4 }}>Tap to copy</ThemedText>
+            </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.modalButton, { backgroundColor: colors.primary }]}
@@ -199,13 +210,25 @@ export default function HomeScreen() {
           <View style={styles.infoGrid}>
               {userProfile?.role === 'patient' ? (
                   <>
-                    <InfoCard title={t('home.healthScore')} value="92" subtext="Great condition" icon="heart.fill" color="#E11D48" />
-                    <InfoCard title={t('home.nextVisit')} value="12 Nov" subtext="Dr. Sarah Wilson" icon="calendar" color={colors.primary} />
+                    <InfoCard 
+                        title={t('home.healthScore')} 
+                        value={(userProfile as any)?.healthScore?.toString() || "0"} 
+                        subtext={(userProfile as any)?.healthScore ? "Last update" : "No data yet"} 
+                        icon="heart.fill" 
+                        color="#E11D48" 
+                    />
+                    <InfoCard 
+                        title={t('home.nextVisit')} 
+                        value={(userProfile as any)?.nextVisit || "Pending"} 
+                        subtext={(userProfile as any)?.linkedDoctorId ? "Dr. Connected" : "No Doctor Linked"} 
+                        icon="calendar" 
+                        color={colors.primary} 
+                    />
                   </>
               ) : (
                   <>
-                     <InfoCard title={t('home.patients')} value="14" subtext="+2 this week" icon="person.2.fill" color={colors.primary} />
-                     <InfoCard title={t('home.pending')} value="3" subtext="Reports to review" icon="clock.fill" color={colors.accent} />
+                     <InfoCard title={t('home.patients')} value={userProfile?.stats?.patientCount?.toString() || "0"} subtext="Total Linked" icon="person.2.fill" color={colors.primary} />
+                     <InfoCard title={t('home.pending')} value={userProfile?.stats?.pendingReports?.toString() || "0"} subtext="Reports to review" icon="clock.fill" color={colors.accent} />
                   </>
               )}
           </View>

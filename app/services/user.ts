@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc, updateDoc, collection, query, where, limit, getDocs } from 'firebase/firestore';
+import { doc, getDoc, setDoc, updateDoc, collection, query, where, limit, getDocs, increment } from 'firebase/firestore';
 import { db } from '@/config/firebase';
 import { UserProfile, DoctorProfile, PatientProfile } from '@/types/user';
 
@@ -48,8 +48,33 @@ export const getUserByDoctorCode = async (code: string): Promise<UserProfile | n
       return querySnapshot.docs[0].data() as UserProfile;
     }
     return null;
+    return null;
   } catch (error) {
     console.error('Error finding doctor by code:', error);
     throw error;
   }
 };
+
+export const incrementPatientCount = async (uid: string) => {
+  try {
+    const docRef = doc(db, 'users', uid);
+    await updateDoc(docRef, {
+      'stats.patientCount': increment(1)
+    });
+  } catch (error) {
+    console.error('Error incrementing patient count:', error);
+  }
+};
+
+export const incrementPendingReports = async (uid: string) => {
+  try {
+    const docRef = doc(db, 'users', uid);
+    await updateDoc(docRef, {
+      'stats.pendingReports': increment(1)
+    });
+  } catch (error) {
+    console.error('Error incrementing pending reports:', error);
+  }
+};
+
+

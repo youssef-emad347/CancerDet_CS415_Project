@@ -1,12 +1,12 @@
 import { Image } from 'expo-image';
-import { 
-  StyleSheet, 
-  View, 
-  TouchableOpacity, 
-  Alert, 
-  ScrollView, 
-  Dimensions, 
-  Modal, 
+import {
+  StyleSheet,
+  View,
+  TouchableOpacity,
+  Alert,
+  ScrollView,
+  Dimensions,
+  Modal,
   Pressable,
   FlatList,
   TextInput,
@@ -67,13 +67,13 @@ export default function HomeScreen() {
 
   const loadData = async () => {
     if (!userProfile) return;
-    
+
     setLoading(true);
     try {
       // Load upcoming appointments
       const appointments = await getUpcomingAppointments(userProfile.uid);
       setUpcomingAppointments(appointments);
-      
+
       // Load linked profiles
       if (userProfile.role === 'patient' && getLinkedDoctors) {
         const doctors = await getLinkedDoctors();
@@ -82,7 +82,7 @@ export default function HomeScreen() {
         const patients = await getLinkedPatients();
         setLinkedPatients(patients);
       }
-      
+
       // Prepare calendar marked dates
       const markedDates: any = {};
       appointments.forEach(appointment => {
@@ -136,52 +136,18 @@ export default function HomeScreen() {
     router.push('/ai-analysis');
   };
 
-  const handleBookAppointment = async () => {
-    if (!selectedDoctor || !selectedTime || !appointmentReason.trim()) {
-      Alert.alert('Error', 'Please fill all required fields');
-      return;
-    }
-
-    if (!userProfile) return;
-
-    setLoading(true);
-    try {
-      await createAppointment({
-        patientId: userProfile.uid,
-        patientName: userProfile.displayName,
-        doctorId: selectedDoctor.uid,
-        doctorName: selectedDoctor.displayName,
-        date: selectedDate.toISOString().split('T')[0],
-        time: selectedTime,
-        reason: appointmentReason,
-        type: 'consultation',
-        status: 'pending',
-      });
-
-      Alert.alert('Success', 'Appointment booked successfully');
-      setAppointmentModalVisible(false);
-      setSelectedDoctor(null);
-      setSelectedTime('');
-      setAppointmentReason('');
-      loadData(); // Refresh data
-    } catch (error) {
-      console.error('Error booking appointment:', error);
-      Alert.alert('Error', 'Failed to book appointment');
-    } finally {
-      setLoading(false);
-    }
-  };
+  /* handleBookAppointment removed */
 
   const QuickAction = ({ icon, label, onPress, color, disabled = false }: any) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={[
-        styles.quickAction, 
-        { 
-          backgroundColor: colors.surface, 
+        styles.quickAction,
+        {
+          backgroundColor: colors.surface,
           borderColor: colors.border,
           opacity: disabled ? 0.5 : 1
         }
-      ]} 
+      ]}
       onPress={onPress}
       disabled={disabled}
     >
@@ -193,7 +159,7 @@ export default function HomeScreen() {
   );
 
   const InfoCard = ({ title, value, subtext, icon, color, onPress }: any) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={[styles.infoCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
       onPress={onPress}
       activeOpacity={onPress ? 0.7 : 1}
@@ -210,24 +176,24 @@ export default function HomeScreen() {
   const AppointmentCard = ({ appointment }: { appointment: Appointment }) => {
     const appointmentDate = new Date(`${appointment.date}T${appointment.time}`);
     const isToday = new Date().toDateString() === appointmentDate.toDateString();
-    
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.appointmentCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
         onPress={() => router.push(`/appointment-details/${appointment.id}`)}
       >
         <View style={styles.appointmentHeader}>
-          <View style={[styles.appointmentStatus, { 
-            backgroundColor: 
+          <View style={[styles.appointmentStatus, {
+            backgroundColor:
               appointment.status === 'confirmed' ? '#DCFCE7' :
-              appointment.status === 'pending' ? '#FEF9C3' :
-              appointment.status === 'cancelled' ? '#FEE2E2' : '#E0F2FE'
+                appointment.status === 'pending' ? '#FEF9C3' :
+                  appointment.status === 'cancelled' ? '#FEE2E2' : '#E0F2FE'
           }]}>
             <ThemedText style={[styles.statusText, {
-              color: 
+              color:
                 appointment.status === 'confirmed' ? '#166534' :
-                appointment.status === 'pending' ? '#854D0E' :
-                appointment.status === 'cancelled' ? '#991B1B' : '#075985'
+                  appointment.status === 'pending' ? '#854D0E' :
+                    appointment.status === 'cancelled' ? '#991B1B' : '#075985'
             }]}>
               {appointment.status.charAt(0).toUpperCase() + appointment.status.slice(1)}
             </ThemedText>
@@ -238,30 +204,30 @@ export default function HomeScreen() {
             </View>
           )}
         </View>
-        
+
         <ThemedText type="defaultSemiBold" style={styles.appointmentTitle}>
           {userProfile?.role === 'patient' ? appointment.doctorName : appointment.patientName}
         </ThemedText>
-        
+
         <View style={styles.appointmentDetails}>
           <View style={styles.detailItem}>
             <IconSymbol name="calendar" size={14} color={colors.secondary} />
             <ThemedText style={[styles.detailText, { color: colors.secondary }]}>
-              {appointmentDate.toLocaleDateString('en-US', { 
-                weekday: 'short', 
-                month: 'short', 
-                day: 'numeric' 
+              {appointmentDate.toLocaleDateString('en-US', {
+                weekday: 'short',
+                month: 'short',
+                day: 'numeric'
               })}
             </ThemedText>
           </View>
-          
+
           <View style={styles.detailItem}>
             <IconSymbol name="clock" size={14} color={colors.secondary} />
             <ThemedText style={[styles.detailText, { color: colors.secondary }]}>
               {appointment.time}
             </ThemedText>
           </View>
-          
+
           <View style={styles.detailItem}>
             <IconSymbol name="stethoscope" size={14} color={colors.secondary} />
             <ThemedText style={[styles.detailText, { color: colors.secondary }]}>
@@ -269,7 +235,7 @@ export default function HomeScreen() {
             </ThemedText>
           </View>
         </View>
-        
+
         <ThemedText style={[styles.reasonText, { color: colors.secondary }]} numberOfLines={2}>
           {appointment.reason}
         </ThemedText>
@@ -278,14 +244,20 @@ export default function HomeScreen() {
   };
 
   const DoctorCard = ({ doctor, onSelect }: { doctor: UserProfile, onSelect: () => void }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={[styles.doctorCard, { backgroundColor: colors.surface, borderColor: colors.border }]}
       onPress={onSelect}
     >
-      <Image
-        source={{ uri: doctor.photoURL || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png' }}
-        style={styles.doctorAvatar}
-      />
+      {doctor.photoURL ? (
+        <Image
+          source={{ uri: doctor.photoURL }}
+          style={styles.doctorAvatar}
+        />
+      ) : (
+        <View style={[styles.doctorAvatar, { backgroundColor: colors.primary + '20', justifyContent: 'center', alignItems: 'center' }]}>
+          <IconSymbol name="person.fill" size={24} color={colors.primary} />
+        </View>
+      )}
       <View style={styles.doctorInfo}>
         <ThemedText type="defaultSemiBold" style={styles.doctorName}>
           {doctor.displayName}
@@ -335,19 +307,19 @@ export default function HomeScreen() {
         <View style={[styles.headerContainer, { backgroundColor: colors.primary }]}>
           <View style={styles.headerContent}>
             <ThemedText style={styles.greetingText}>
-              {new Date().getHours() < 12 ? '🌤️ صباح الخير' : 
-               new Date().getHours() < 18 ? '☀️ مساء الخير' : '🌙 مساء الخير'}
+              {new Date().getHours() < 12 ? t('home.greeting.morning') :
+                new Date().getHours() < 18 ? t('home.greeting.afternoon') : t('home.greeting.evening')}
             </ThemedText>
             <ThemedText style={styles.nameText}>{userProfile?.displayName || 'User'}</ThemedText>
             <ThemedText style={styles.roleText}>
-              {userProfile?.role === 'doctor' ? '👨‍⚕️ طبيب' : '👤 مريض'}
+              {userProfile?.role === 'doctor' ? t('home.role.doctorDisplay') : t('home.role.patientDisplay')}
             </ThemedText>
           </View>
-          <IconSymbol 
-            name={userProfile?.role === 'doctor' ? "stethoscope" : "heart.fill"} 
-            size={80} 
-            color="rgba(255,255,255,0.2)" 
-            style={styles.headerIcon} 
+          <IconSymbol
+            name={userProfile?.role === 'doctor' ? "stethoscope" : "heart.fill"}
+            size={80}
+            color="rgba(255,255,255,0.2)"
+            style={styles.headerIcon}
           />
         </View>
       }
@@ -362,34 +334,34 @@ export default function HomeScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.modalView, { backgroundColor: colors.surface }]}>
             <IconSymbol name="qrcode" size={48} color={colors.primary} />
-            <ThemedText type="subtitle" style={{ marginTop: 16, marginBottom: 8 }}>كود الدكتور</ThemedText>
+            <ThemedText type="subtitle" style={{ marginTop: 16, marginBottom: 8 }}>{t('home.codeModal.title')}</ThemedText>
             <ThemedText style={{ textAlign: 'center', opacity: 0.7, marginBottom: 20 }}>
-              شارك هذا الكود مع المرضى للربط معك
+              {t('home.codeModal.desc')}
             </ThemedText>
-            
-            <TouchableOpacity 
+
+            <TouchableOpacity
               style={[styles.codeDisplay, { borderColor: colors.primary, backgroundColor: colors.primary + '10' }]}
               onPress={async () => {
-                  // @ts-ignore
-                  const code = userProfile?.doctorCode;
-                  if (code) {
-                      await Clipboard.setStringAsync(code);
-                      Alert.alert('تم النسخ', 'تم نسخ كود الدكتور');
-                  }
+                // @ts-ignore
+                const code = userProfile?.doctorCode;
+                if (code) {
+                  await Clipboard.setStringAsync(code);
+                  Alert.alert(t('home.codeModal.copied'), t('home.codeModal.copiedDesc'));
+                }
               }}
             >
               {/* @ts-ignore */}
               <ThemedText type="title" style={{ color: colors.primary, letterSpacing: 2, fontFamily: 'monospace' }}>
                 {userProfile?.doctorCode || '----'}
               </ThemedText>
-              <ThemedText style={{ fontSize: 10, opacity: 0.6, textAlign: 'center', marginTop: 4 }}>انقر للنسخ</ThemedText>
+              <ThemedText style={{ fontSize: 10, opacity: 0.6, textAlign: 'center', marginTop: 4 }}>{t('home.codeModal.copy')}</ThemedText>
             </TouchableOpacity>
 
             <TouchableOpacity
               style={[styles.modalButton, { backgroundColor: colors.primary }]}
               onPress={() => setCodeModalVisible(false)}
             >
-              <ThemedText style={styles.modalButtonText}>إغلاق</ThemedText>
+              <ThemedText style={styles.modalButtonText}>{t('home.codeModal.close')}</ThemedText>
             </TouchableOpacity>
           </View>
         </View>
@@ -405,28 +377,28 @@ export default function HomeScreen() {
         <View style={styles.modalOverlay}>
           <View style={[styles.largeModalView, { backgroundColor: colors.surface }]}>
             <View style={styles.modalHeader}>
-              <ThemedText type="title">الأطباء المتاحين</ThemedText>
+              <ThemedText type="title">{t('home.modals.doctors.title')}</ThemedText>
               <TouchableOpacity onPress={() => setDoctorsModalVisible(false)}>
                 <IconSymbol name="xmark.circle.fill" size={24} color={colors.secondary} />
               </TouchableOpacity>
             </View>
-            
+
             {loadingDoctors ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="large" color={colors.primary} />
-                <ThemedText style={{ marginTop: 16, color: colors.secondary }}>جاري تحميل الأطباء...</ThemedText>
+                <ThemedText style={{ marginTop: 16, color: colors.secondary }}>{t('home.modals.doctors.loading')}</ThemedText>
               </View>
             ) : availableDoctors.length > 0 ? (
               <FlatList
                 data={availableDoctors}
                 keyExtractor={(item) => item.uid}
                 renderItem={({ item }) => (
-                  <DoctorCard 
-                    doctor={item} 
+                  <DoctorCard
+                    doctor={item}
                     onSelect={() => {
                       setSelectedDoctor(item);
                       setDoctorsModalVisible(false);
-                      setAppointmentModalVisible(true);
+                      // setAppointmentModalVisible(true); // Removed booking logic
                     }}
                   />
                 )}
@@ -436,187 +408,54 @@ export default function HomeScreen() {
             ) : (
               <View style={styles.emptyContainer}>
                 <IconSymbol name="person.slash" size={48} color={colors.secondary} />
-                <ThemedText style={{ marginTop: 16, color: colors.secondary }}>لا توجد أطباء متاحين حالياً</ThemedText>
+                <ThemedText style={{ marginTop: 16, color: colors.secondary }}>{t('home.modals.doctors.empty')}</ThemedText>
               </View>
             )}
           </View>
         </View>
       </Modal>
 
-      {/* Appointment Booking Modal */}
-      <Modal
-        animationType="slide"
-        transparent={true}
-        visible={appointmentModalVisible}
-        onRequestClose={() => setAppointmentModalVisible(false)}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={[styles.largeModalView, { backgroundColor: colors.surface }]}>
-            <View style={styles.modalHeader}>
-              <ThemedText type="title">حجز موعد جديد</ThemedText>
-              <TouchableOpacity onPress={() => setAppointmentModalVisible(false)}>
-                <IconSymbol name="xmark.circle.fill" size={24} color={colors.secondary} />
-              </TouchableOpacity>
-            </View>
-            
-            <ScrollView showsVerticalScrollIndicator={false} style={styles.appointmentForm}>
-              {/* Selected Doctor */}
-              {selectedDoctor && (
-                <View style={styles.selectedDoctorContainer}>
-                  <ThemedText style={[styles.label, { color: colors.secondary }]}>الدكتور المختار</ThemedText>
-                  <View style={[styles.selectedDoctorCard, { backgroundColor: colors.primary + '10', borderColor: colors.primary }]}>
-                    <Image
-                      source={{ uri: selectedDoctor.photoURL || 'https://cdn.pixabay.com/photo/2015/10/05/22/37/blank-profile-picture-973460_1280.png' }}
-                      style={styles.smallDoctorAvatar}
-                    />
-                    <View style={styles.selectedDoctorInfo}>
-                      <ThemedText type="defaultSemiBold">{selectedDoctor.displayName}</ThemedText>
-                      {/* @ts-ignore */}
-                      <ThemedText style={{ color: colors.secondary, fontSize: 12 }}>
-                        {selectedDoctor.specialty || 'General Practitioner'}
-                      </ThemedText>
-                    </View>
-                    <TouchableOpacity onPress={() => setSelectedDoctor(null)}>
-                      <IconSymbol name="xmark.circle.fill" size={20} color={colors.secondary} />
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
-              
-              {/* Date Selection */}
-              <View style={styles.formGroup}>
-                <ThemedText style={[styles.label, { color: colors.secondary }]}>التاريخ</ThemedText>
-                <TouchableOpacity 
-                  style={[styles.inputField, { backgroundColor: colors.background, borderColor: colors.border }]}
-                  onPress={() => setShowDatePicker(true)}
-                >
-                  <ThemedText>
-                    {selectedDate.toLocaleDateString('ar-EG', { 
-                      weekday: 'long', 
-                      year: 'numeric', 
-                      month: 'long', 
-                      day: 'numeric' 
-                    })}
-                  </ThemedText>
-                  <IconSymbol name="calendar" size={20} color={colors.secondary} />
-                </TouchableOpacity>
-                
-                {showDatePicker && (
-                  <DateTimePicker
-                    value={selectedDate}
-                    mode="date"
-                    display="default"
-                    minimumDate={new Date()}
-                    onChange={(event, date) => {
-                      setShowDatePicker(false);
-                      if (date) setSelectedDate(date);
-                    }}
-                  />
-                )}
-              </View>
-              
-              {/* Time Selection */}
-              <View style={styles.formGroup}>
-                <ThemedText style={[styles.label, { color: colors.secondary }]}>الوقت</ThemedText>
-                <TextInput
-                  style={[styles.timeInput, { 
-                    backgroundColor: colors.background, 
-                    borderColor: colors.border,
-                    color: colors.text
-                  }]}
-                  placeholder="مثال: 14:30"
-                  placeholderTextColor={colors.secondary}
-                  value={selectedTime}
-                  onChangeText={setSelectedTime}
-                />
-                <ThemedText style={[styles.hint, { color: colors.secondary }]}>
-                  أدخل الوقت بتنسيق 24 ساعة (ساعة:دقيقة)
-                </ThemedText>
-              </View>
-              
-              {/* Reason */}
-              <View style={styles.formGroup}>
-                <ThemedText style={[styles.label, { color: colors.secondary }]}>سبب الزيارة</ThemedText>
-                <TextInput
-                  style={[styles.textArea, { 
-                    backgroundColor: colors.background, 
-                    borderColor: colors.border,
-                    color: colors.text
-                  }]}
-                  placeholder="وصف الأعراض أو السبب"
-                  placeholderTextColor={colors.secondary}
-                  value={appointmentReason}
-                  onChangeText={setAppointmentReason}
-                  multiline
-                  numberOfLines={4}
-                  textAlignVertical="top"
-                />
-              </View>
-              
-              {/* Action Buttons */}
-              <View style={styles.formActions}>
-                <TouchableOpacity 
-                  style={[styles.secondaryButton, { borderColor: colors.border }]}
-                  onPress={() => setAppointmentModalVisible(false)}
-                >
-                  <ThemedText style={{ color: colors.secondary }}>إلغاء</ThemedText>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={[styles.primaryButton, { backgroundColor: colors.primary }]}
-                  onPress={handleBookAppointment}
-                  disabled={loading || !selectedDoctor || !selectedTime || !appointmentReason.trim()}
-                >
-                  {loading ? (
-                    <ActivityIndicator color="white" />
-                  ) : (
-                    <ThemedText style={{ color: 'white', fontWeight: 'bold' }}>حجز الموعد</ThemedText>
-                  )}
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
-          </View>
-        </View>
-      </Modal>
+      {/* Appointment Booking Modal Removed */}
 
       {/* Main Content */}
       <View style={styles.contentContainer}>
         {/* Quick Stats */}
+        {/* Quick Stats */}
         <View style={styles.statsContainer}>
           {userProfile?.role === 'patient' ? (
             <>
-              <InfoCard 
-                title="المؤشر الصحي" 
-                value={(userProfile as any)?.healthScore?.toString() || "0"} 
-                subtext="آخر تحديث" 
-                icon="heart.fill" 
+              <InfoCard
+                title={t('home.stats.healthScore')}
+                value={(userProfile as any)?.healthScore?.toString() || "0"}
+                subtext={t('home.stats.lastUpdate')}
+                icon="heart.fill"
                 color="#E11D48"
                 onPress={() => router.push('/health-metrics')}
               />
-              <InfoCard 
-                title="المواعيد القادمة" 
-                value={upcomingAppointments.length.toString()} 
-                subtext="موعد قادم" 
-                icon="calendar.badge.clock" 
+              <InfoCard
+                title={t('home.stats.upcomingAppointments')}
+                value={upcomingAppointments.length.toString()}
+                subtext={t('home.stats.nextAppointment')}
+                icon="calendar.badge.clock"
                 color={colors.primary}
                 onPress={() => router.push('/appointments')}
               />
             </>
           ) : (
             <>
-              <InfoCard 
-                title="المرضى" 
-                value={userProfile?.stats?.patientCount?.toString() || "0"} 
-                subtext="مرضى مرتبطين" 
-                icon="person.2.fill" 
+              <InfoCard
+                title={t('home.stats.patients')}
+                value={userProfile?.stats?.patientCount?.toString() || "0"}
+                subtext={t('home.stats.linkedPatients')}
+                icon="person.2.fill"
                 color={colors.primary}
                 onPress={() => router.push('/(tabs)/patients')}
               />
-              <InfoCard 
-                title="المواعيد" 
-                value={upcomingAppointments.length.toString()} 
-                subtext="اليوم" 
-                icon="calendar" 
+              <InfoCard
+                title={t('home.stats.appointments')}
+                value={upcomingAppointments.length.toString()}
+                subtext={t('home.stats.today')}
+                icon="calendar"
                 color="#10B981"
                 onPress={() => router.push('/doctor-schedule')}
               />
@@ -625,59 +464,53 @@ export default function HomeScreen() {
         </View>
 
         {/* Quick Actions */}
-        <ThemedText type="subtitle" style={styles.sectionTitle}>الإجراءات السريعة</ThemedText>
+        <ThemedText type="subtitle" style={styles.sectionTitle}>{t('home.section.quickActions')}</ThemedText>
         <View style={styles.quickActionGrid}>
           {userProfile?.role === 'patient' ? (
             <>
-              <QuickAction 
-                icon="calendar.badge.plus" 
-                label="حجز موعد" 
-                color={colors.primary} 
-                onPress={loadAvailableDoctors}
-              />
-              <QuickAction 
-                icon="message.fill" 
-                label="المحادثات" 
-                color="#10B981" 
+              <QuickAction
+                icon="message.fill"
+                label={t('home.patientChats')}
+                color="#10B981"
                 onPress={() => router.push('/(tabs)/chat')}
               />
-              <QuickAction 
-                icon="paperclip" 
-                label="رفع تقرير" 
-                color="#F59E0B" 
+              <QuickAction
+                icon="paperclip"
+                label={t('home.uploadReport')}
+                color="#F59E0B"
                 onPress={handleDocumentPick}
-              />
-              <QuickAction 
-                icon="waveform.path.ecg" 
-                label="تحليل ذكي" 
-                color="#8B5CF6" 
-                onPress={handleAiAnalysis}
               />
             </>
           ) : (
             <>
-              <QuickAction 
-                icon="qrcode" 
-                label="كود الربط" 
-                color={colors.primary} 
+              <QuickAction
+                icon="waveform.path.ecg"
+                label={t('home.aiPrediction')}
+                color="#8B5CF6"
+                onPress={handleAiAnalysis}
+              />
+              <QuickAction
+                icon="qrcode"
+                label={t('home.myCode')}
+                color={colors.primary}
                 onPress={() => setCodeModalVisible(true)}
               />
-              <QuickAction 
-                icon="person.badge.plus" 
-                label="إضافة مريض" 
-                color="#10B981" 
+              <QuickAction
+                icon="person.badge.plus"
+                label={t('home.patients')}
+                color="#10B981"
                 onPress={() => router.push('/add-patient')}
               />
-              <QuickAction 
-                icon="message.fill" 
-                label="المحادثات" 
-                color="#F59E0B" 
+              <QuickAction
+                icon="message.fill"
+                label={t('home.patientChats')}
+                color="#F59E0B"
                 onPress={() => router.push('/(tabs)/chat')}
               />
-              <QuickAction 
-                icon="doc.text.fill" 
-                label="مراجعة تقارير" 
-                color="#8B5CF6" 
+              <QuickAction
+                icon="doc.text.fill"
+                label={t('home.pending')}
+                color="#EF4444"
                 onPress={() => router.push('/pending-reports')}
               />
             </>
@@ -686,14 +519,14 @@ export default function HomeScreen() {
 
         {/* Upcoming Appointments */}
         <View style={styles.appointmentsHeader}>
-          <ThemedText type="subtitle" style={styles.sectionTitle}>المواعيد القادمة</ThemedText>
+          <ThemedText type="subtitle" style={styles.sectionTitle}>{t('home.section.upcoming')}</ThemedText>
           {upcomingAppointments.length > 0 && (
             <TouchableOpacity onPress={() => router.push('/appointments')}>
-              <ThemedText style={{ color: colors.primary, fontSize: 14 }}>عرض الكل</ThemedText>
+              <ThemedText style={{ color: colors.primary, fontSize: 14 }}>{t('home.action.viewAll')}</ThemedText>
             </TouchableOpacity>
           )}
         </View>
-        
+
         {loading ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="small" color={colors.primary} />
@@ -711,17 +544,12 @@ export default function HomeScreen() {
           <View style={[styles.emptyState, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <IconSymbol name="calendar" size={40} color={colors.secondary} />
             <ThemedText style={[styles.emptyStateText, { color: colors.secondary }]}>
-              {userProfile?.role === 'patient' 
-                ? 'لا توجد مواعيد قادمة. احجز موعدك الآن!' 
-                : 'لا توجد مواعيد قادمة.'}
+              {userProfile?.role === 'patient'
+                ? t('home.empty.noAppointmentsPatient')
+                : t('home.empty.noAppointmentsDoctor')}
             </ThemedText>
             {userProfile?.role === 'patient' && (
-              <TouchableOpacity 
-                style={[styles.emptyStateButton, { backgroundColor: colors.primary }]}
-                onPress={loadAvailableDoctors}
-              >
-                <ThemedText style={{ color: 'white', fontWeight: 'bold' }}>حجز موعد جديد</ThemedText>
-              </TouchableOpacity>
+              <></>
             )}
           </View>
         )}
@@ -731,19 +559,19 @@ export default function HomeScreen() {
           <>
             <View style={styles.appointmentsHeader}>
               <ThemedText type="subtitle" style={styles.sectionTitle}>
-                {userProfile?.role === 'patient' ? 'الأطباء المرتبطين' : 'المرضى الجدد'}
+                {userProfile?.role === 'patient' ? t('home.section.linkedDoctors') : t('home.section.newPatients')}
               </ThemedText>
               <TouchableOpacity onPress={() => router.push(userProfile?.role === 'patient' ? '/doctors' : '/(tabs)/patients')}>
-                <ThemedText style={{ color: colors.primary, fontSize: 14 }}>عرض الكل</ThemedText>
+                <ThemedText style={{ color: colors.primary, fontSize: 14 }}>{t('home.action.viewAll')}</ThemedText>
               </TouchableOpacity>
             </View>
-            
+
             <FlatList
               data={userProfile?.role === 'patient' ? linkedDoctors.slice(0, 3) : linkedPatients.slice(0, 3)}
               keyExtractor={(item) => item.uid}
               renderItem={({ item }) => (
-                <DoctorCard 
-                  doctor={item} 
+                <DoctorCard
+                  doctor={item}
                   onSelect={() => {
                     if (userProfile?.role === 'patient') {
                       // Navigate to doctor profile
@@ -765,7 +593,7 @@ export default function HomeScreen() {
         {/* Mini Calendar for Patients */}
         {userProfile?.role === 'patient' && (
           <>
-            <ThemedText type="subtitle" style={styles.sectionTitle}>التقويم</ThemedText>
+            <ThemedText type="subtitle" style={styles.sectionTitle}>{t('home.section.calendar')}</ThemedText>
             <View style={[styles.calendarContainer, { backgroundColor: colors.surface, borderColor: colors.border }]}>
               <Calendar
                 current={new Date().toISOString().split('T')[0]}
@@ -860,7 +688,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   quickAction: {
-    width: '48%',
+    width: '47%',
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,

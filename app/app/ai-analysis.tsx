@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
-import { 
-  StyleSheet, 
-  View, 
-  TouchableOpacity, 
-  Alert, 
-  ActivityIndicator, 
-  ScrollView, 
-  TextInput, 
+import {
+  StyleSheet,
+  View,
+  TouchableOpacity,
+  Alert,
+  ActivityIndicator,
+  ScrollView,
+  TextInput,
   Switch,
   Dimensions,
   Modal,
-  TouchableWithoutFeedback 
+  TouchableWithoutFeedback
 } from 'react-native';
 import { Stack } from 'expo-router';
 import Constants from 'expo-constants';
@@ -140,7 +140,7 @@ export default function AiAnalysisScreen() {
   const [selectedCancerType, setSelectedCancerType] = useState<CancerType | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
   const [result, setResult] = useState<PredictionResult | null>(null);
-  
+
   // بيانات النماذج
   const [breastData, setBreastData] = useState<BreastCancerData>({
     radius_mean: '',
@@ -223,12 +223,12 @@ export default function AiAnalysisScreen() {
     try {
       // استخدم نفس الـ endpoint للجميع أو غيره حسب حاجة السيرفر
       const endpoint = '/predict';
-      
+
       // إعداد البيانات بالشكل المطلوب
       const requestData = prepareRequestData(modelName, features);
-      
+
       console.log('Sending request:', JSON.stringify(requestData, null, 2));
-      
+
       const response = await fetch(`${API_BASE_URL}${endpoint}`, {
         method: 'POST',
         headers: {
@@ -262,7 +262,7 @@ export default function AiAnalysisScreen() {
           }
         }
         break;
-        
+
       case 'lung':
         if (!data.age || !data.pack_years) {
           Alert.alert(t('ai.errors.dataError'), t('ai.errors.missingLung'));
@@ -273,7 +273,7 @@ export default function AiAnalysisScreen() {
           return false;
         }
         break;
-        
+
       case 'colorectal':
         if (!data.Age || !data.BMI) {
           Alert.alert(t('ai.errors.dataError'), t('ai.errors.missingColorectal'));
@@ -285,7 +285,7 @@ export default function AiAnalysisScreen() {
         }
         break;
     }
-    
+
     return true;
   };
 
@@ -298,7 +298,7 @@ export default function AiAnalysisScreen() {
     // تحقق من صحة البيانات
     let dataToSend: any;
     let modelName = '';
-    
+
     switch (selectedCancerType) {
       case 'breast':
         if (!validateData(breastData, 'breast')) return;
@@ -306,7 +306,7 @@ export default function AiAnalysisScreen() {
         dataToSend = { ...breastData };
         modelName = 'breast';
         break;
-        
+
       case 'lung':
         if (!validateData(lungData, 'lung')) return;
         // تحويل البيانات الرئوية للصيغة المناسبة تماماً كما في المثال
@@ -324,7 +324,7 @@ export default function AiAnalysisScreen() {
         };
         modelName = 'lung';
         break;
-        
+
       case 'colorectal':
         if (!validateData(colorectalData, 'colorectal')) return;
         // تحويل بيانات القولون للصيغة المناسبة
@@ -345,7 +345,7 @@ export default function AiAnalysisScreen() {
         };
         modelName = 'colorectal';
         break;
-        
+
       default:
         return;
     }
@@ -366,121 +366,121 @@ export default function AiAnalysisScreen() {
 
 
   const handlePdfUpload = async (type: CancerType) => {
-      try {
-          const result = await DocumentPicker.getDocumentAsync({
-              type: 'application/pdf',
-              copyToCacheDirectory: true,
+    try {
+      const result = await DocumentPicker.getDocumentAsync({
+        type: 'application/pdf',
+        copyToCacheDirectory: true,
+      });
+
+      if (result.canceled) return;
+
+      const fileAsset = result.assets[0];
+      setAnalyzing(true);
+
+      const formData = new FormData();
+      formData.append('type', type);
+      formData.append('file', {
+        uri: fileAsset.uri,
+        name: fileAsset.name,
+        type: 'application/pdf'
+      } as any);
+
+      const response = await fetch(`${API_BASE_URL}/extract-pdf`, {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
+
+      if (!response.ok) throw new Error('Failed to extract data');
+      const json = await response.json();
+
+      if (json.status === 'success' && json.data) {
+        const extracted = json.data;
+        let count = 0;
+
+        if (type === 'lung') {
+          setLungData(prev => {
+            const newData = { ...prev };
+            if (extracted.age) newData.age = extracted.age.toString();
+            if (extracted.packYears) newData.pack_years = extracted.packYears.toString();
+            if (newData.age && newData.pack_years) {
+              newData.cumulative_smoking = (parseFloat(newData.age) * parseFloat(newData.pack_years)).toString();
+            }
+
+            // Categorical & Boolean
+            if (extracted.gender) newData.gender = extracted.gender;
+            if (extracted.radon_exposure) newData.radon_exposure = extracted.radon_exposure;
+            if (extracted.alcohol_consumption) newData.alcohol_consumption = extracted.alcohol_consumption;
+            if (extracted.family_history !== undefined) newData.family_history = extracted.family_history;
+            if (extracted.asbestos_exposure !== undefined) newData.asbestos_exposure = extracted.asbestos_exposure;
+            if (extracted.secondhand_smoke_exposure !== undefined) newData.secondhand_smoke_exposure = extracted.secondhand_smoke_exposure;
+            if (extracted.copd_diagnosis !== undefined) newData.copd_diagnosis = extracted.copd_diagnosis;
+
+            return newData;
           });
+          count = Object.keys(extracted).length;
+        }
+        else if (type === 'colorectal') {
+          setColorectalData(prev => {
+            const newData = { ...prev };
+            if (extracted.age) newData.Age = extracted.age.toString();
+            if (extracted.bmi) newData.BMI = extracted.bmi.toString();
 
-          if (result.canceled) return;
+            // Categorical
+            if (extracted.gender) newData.Gender = extracted.gender;
+            if (extracted.lifestyle) newData.Lifestyle = extracted.lifestyle;
+            if (extracted.family_history !== undefined) newData.Family_History_CRC = extracted.family_history;
 
-          const fileAsset = result.assets[0];
-          setAnalyzing(true);
-
-          const formData = new FormData();
-          formData.append('type', type);
-          formData.append('file', {
-              uri: fileAsset.uri,
-              name: fileAsset.name,
-              type: 'application/pdf'
-          } as any);
-
-          const response = await fetch(`${API_BASE_URL}/extract-pdf`, {
-              method: 'POST',
-              body: formData,
-              headers: {
-                  'Content-Type': 'multipart/form-data',
-              },
+            if (extracted.carbs) newData['Carbohydrates (g)'] = extracted.carbs.toString();
+            if (extracted.proteins) newData['Proteins (g)'] = extracted.proteins.toString();
+            if (extracted.fats) newData['Fats (g)'] = extracted.fats.toString();
+            if (extracted.vitA) newData['Vitamin A (IU)'] = extracted.vitA.toString();
+            if (extracted.vitC) newData['Vitamin C (mg)'] = extracted.vitC.toString();
+            if (extracted.iron) newData['Iron (mg)'] = extracted.iron.toString();
+            return newData;
           });
-
-          if (!response.ok) throw new Error('Failed to extract data');
-          const json = await response.json();
-
-          if (json.status === 'success' && json.data) {
-              const extracted = json.data;
-              let count = 0;
-
-              if (type === 'lung') {
-                  setLungData(prev => {
-                      const newData = { ...prev };
-                      if (extracted.age) newData.age = extracted.age.toString();
-                      if (extracted.packYears) newData.pack_years = extracted.packYears.toString();
-                      if (newData.age && newData.pack_years) {
-                          newData.cumulative_smoking = (parseFloat(newData.age) * parseFloat(newData.pack_years)).toString();
-                      }
-                      
-                      // Categorical & Boolean
-                      if (extracted.gender) newData.gender = extracted.gender;
-                      if (extracted.radon_exposure) newData.radon_exposure = extracted.radon_exposure;
-                      if (extracted.alcohol_consumption) newData.alcohol_consumption = extracted.alcohol_consumption;
-                      if (extracted.family_history !== undefined) newData.family_history = extracted.family_history;
-                      if (extracted.asbestos_exposure !== undefined) newData.asbestos_exposure = extracted.asbestos_exposure;
-                      if (extracted.secondhand_smoke_exposure !== undefined) newData.secondhand_smoke_exposure = extracted.secondhand_smoke_exposure;
-                      if (extracted.copd_diagnosis !== undefined) newData.copd_diagnosis = extracted.copd_diagnosis;
-
-                      return newData;
-                  });
-                  count = Object.keys(extracted).length;
+          count = Object.keys(extracted).length;
+        }
+        else if (type === 'breast') {
+          setBreastData(prev => {
+            const newData = { ...prev };
+            Object.keys(extracted).forEach(key => {
+              if (key in newData) {
+                // @ts-ignore
+                newData[key] = extracted[key].toString();
               }
-              else if (type === 'colorectal') {
-                  setColorectalData(prev => {
-                      const newData = { ...prev };
-                      if (extracted.age) newData.Age = extracted.age.toString();
-                      if (extracted.bmi) newData.BMI = extracted.bmi.toString();
-                      
-                      // Categorical
-                      if (extracted.gender) newData.Gender = extracted.gender;
-                      if (extracted.lifestyle) newData.Lifestyle = extracted.lifestyle;
-                      if (extracted.family_history !== undefined) newData.Family_History_CRC = extracted.family_history;
+            });
+            return newData;
+          });
+          count = Object.keys(extracted).length;
+        }
 
-                      if (extracted.carbs) newData['Carbohydrates (g)'] = extracted.carbs.toString();
-                      if (extracted.proteins) newData['Proteins (g)'] = extracted.proteins.toString();
-                      if (extracted.fats) newData['Fats (g)'] = extracted.fats.toString();
-                      if (extracted.vitA) newData['Vitamin A (IU)'] = extracted.vitA.toString();
-                      if (extracted.vitC) newData['Vitamin C (mg)'] = extracted.vitC.toString();
-                      if (extracted.iron) newData['Iron (mg)'] = extracted.iron.toString();
-                      return newData;
-                  });
-                  count = Object.keys(extracted).length;
-              }
-              else if (type === 'breast') {
-                  setBreastData(prev => {
-                       const newData = { ...prev };
-                       Object.keys(extracted).forEach(key => {
-                           if (key in newData) {
-                               // @ts-ignore
-                               newData[key] = extracted[key].toString();
-                           }
-                       });
-                       return newData;
-                   });
-                   count = Object.keys(extracted).length;
-              }
+        // Notify Linked Doctor
+        if (userProfile?.linkedDoctorId) {
+          await incrementPendingReports(userProfile.linkedDoctorId);
+        }
 
-              // Notify Linked Doctor
-              if (userProfile?.linkedDoctorId) {
-                  await incrementPendingReports(userProfile.linkedDoctorId);
-              }
-
-              Alert.alert('Success', `Extracted ${count} values from report.`);
-          } else {
-              Alert.alert('Analysis Failed', 'Could not extract valid data.');
-          }
-
-      } catch (error: any) {
-          Alert.alert('Error', 'Failed to process PDF: ' + error.message);
-      } finally {
-          setAnalyzing(false);
+        Alert.alert('Success', `Extracted ${count} values from report.`);
+      } else {
+        Alert.alert('Analysis Failed', 'Could not extract valid data.');
       }
+
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to process PDF: ' + error.message);
+    } finally {
+      setAnalyzing(false);
+    }
   };
 
   const renderBreastCancerForm = () => (
     <View style={styles.fullFormContainer}>
       <ThemedText type="subtitle" style={styles.formTitle}>{t('ai.forms.breast.title')}</ThemedText>
       <ThemedText style={styles.formSubtitle}>{t('ai.forms.breast.subtitle')}</ThemedText>
-      
-      <TouchableOpacity 
-        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]} 
+
+      <TouchableOpacity
+        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]}
         onPress={() => handlePdfUpload('breast')}
       >
         <IconSymbol name="doc.text" size={20} color="white" style={{ marginRight: 8 }} />
@@ -490,78 +490,78 @@ export default function AiAnalysisScreen() {
       </TouchableOpacity>
 
       <View style={styles.formGrid}>
-          {/* Group 1: Mean Features */}
-          <View style={styles.featureGroup}>
-            <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.breast.groups.mean')}</ThemedText>
-            {[
-              'radius_mean', 'texture_mean', 'perimeter_mean', 'area_mean', 'smoothness_mean',
-              'compactness_mean', 'concavity_mean', 'concave_points_mean', 'symmetry_mean', 'fractal_dimension_mean'
-            ].map((key) => (
-              <View key={key} style={styles.formRow}>
-                <ThemedText style={styles.inputLabel}>{t(`ai.forms.breast.fields.${key}`)}</ThemedText>
-                <TextInput
-                  style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                  value={breastData[key as keyof BreastCancerData]}
-                  onChangeText={(text) => setBreastData(prev => ({ ...prev, [key]: text }))}
-                  placeholder={t('ai.forms.breast.placeholder')}
-                  placeholderTextColor={colors.icon}
-                  keyboardType="decimal-pad"
-                />
-              </View>
-            ))}
-          </View>
+        {/* Group 1: Mean Features */}
+        <View style={styles.featureGroup}>
+          <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.breast.groups.mean')}</ThemedText>
+          {[
+            'radius_mean', 'texture_mean', 'perimeter_mean', 'area_mean', 'smoothness_mean',
+            'compactness_mean', 'concavity_mean', 'concave_points_mean', 'symmetry_mean', 'fractal_dimension_mean'
+          ].map((key) => (
+            <View key={key} style={styles.formRow}>
+              <ThemedText style={styles.inputLabel}>{t(`ai.forms.breast.fields.${key}`)}</ThemedText>
+              <TextInput
+                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
+                value={breastData[key as keyof BreastCancerData]}
+                onChangeText={(text) => setBreastData(prev => ({ ...prev, [key]: text }))}
+                placeholder={t('ai.forms.breast.placeholder')}
+                placeholderTextColor={colors.icon}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          ))}
+        </View>
 
-          {/* Group 2: Standard Error Features */}
-          <View style={styles.featureGroup}>
-            <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.breast.groups.se')}</ThemedText>
-            {[
-              'radius_se', 'texture_se', 'perimeter_se', 'area_se', 'smoothness_se',
-              'compactness_se', 'concavity_se', 'concave_points_se', 'symmetry_se', 'fractal_dimension_se'
-            ].map((key) => (
-              <View key={key} style={styles.formRow}>
-                <ThemedText style={styles.inputLabel}>{t(`ai.forms.breast.fields.${key}`)}</ThemedText>
-                <TextInput
-                  style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                  value={breastData[key as keyof BreastCancerData]}
-                  onChangeText={(text) => setBreastData(prev => ({ ...prev, [key]: text }))}
-                  placeholder={t('ai.forms.breast.placeholder')}
-                  placeholderTextColor={colors.icon}
-                  keyboardType="decimal-pad"
-                />
-              </View>
-            ))}
-          </View>
+        {/* Group 2: Standard Error Features */}
+        <View style={styles.featureGroup}>
+          <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.breast.groups.se')}</ThemedText>
+          {[
+            'radius_se', 'texture_se', 'perimeter_se', 'area_se', 'smoothness_se',
+            'compactness_se', 'concavity_se', 'concave_points_se', 'symmetry_se', 'fractal_dimension_se'
+          ].map((key) => (
+            <View key={key} style={styles.formRow}>
+              <ThemedText style={styles.inputLabel}>{t(`ai.forms.breast.fields.${key}`)}</ThemedText>
+              <TextInput
+                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
+                value={breastData[key as keyof BreastCancerData]}
+                onChangeText={(text) => setBreastData(prev => ({ ...prev, [key]: text }))}
+                placeholder={t('ai.forms.breast.placeholder')}
+                placeholderTextColor={colors.icon}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          ))}
+        </View>
 
-          {/* Group 3: Worst Features */}
-          <View style={styles.featureGroup}>
-            <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.breast.groups.worst')}</ThemedText>
-            {[
-              'radius_worst', 'texture_worst', 'perimeter_worst', 'area_worst', 'smoothness_worst',
-              'compactness_worst', 'concavity_worst', 'concave_points_worst', 'symmetry_worst', 'fractal_dimension_worst'
-            ].map((key) => (
-              <View key={key} style={styles.formRow}>
-                <ThemedText style={styles.inputLabel}>{t(`ai.forms.breast.fields.${key}`)}</ThemedText>
-                <TextInput
-                  style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                  value={breastData[key as keyof BreastCancerData]}
-                  onChangeText={(text) => setBreastData(prev => ({ ...prev, [key]: text }))}
-                  placeholder={t('ai.forms.breast.placeholder')}
-                  placeholderTextColor={colors.icon}
-                  keyboardType="decimal-pad"
-                />
-              </View>
-            ))}
-          </View>
+        {/* Group 3: Worst Features */}
+        <View style={styles.featureGroup}>
+          <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.breast.groups.worst')}</ThemedText>
+          {[
+            'radius_worst', 'texture_worst', 'perimeter_worst', 'area_worst', 'smoothness_worst',
+            'compactness_worst', 'concavity_worst', 'concave_points_worst', 'symmetry_worst', 'fractal_dimension_worst'
+          ].map((key) => (
+            <View key={key} style={styles.formRow}>
+              <ThemedText style={styles.inputLabel}>{t(`ai.forms.breast.fields.${key}`)}</ThemedText>
+              <TextInput
+                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
+                value={breastData[key as keyof BreastCancerData]}
+                onChangeText={(text) => setBreastData(prev => ({ ...prev, [key]: text }))}
+                placeholder={t('ai.forms.breast.placeholder')}
+                placeholderTextColor={colors.icon}
+                keyboardType="decimal-pad"
+              />
+            </View>
+          ))}
         </View>
       </View>
+    </View>
   );
 
   const renderLungCancerForm = () => (
     <View style={styles.fullFormContainer}>
       <ThemedText type="subtitle" style={styles.formTitle}>{t('ai.forms.lung.title')}</ThemedText>
-      
-      <TouchableOpacity 
-        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]} 
+
+      <TouchableOpacity
+        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]}
         onPress={() => handlePdfUpload('lung')}
       >
         <IconSymbol name="doc.text" size={20} color="white" style={{ marginRight: 8 }} />
@@ -571,156 +571,156 @@ export default function AiAnalysisScreen() {
       </TouchableOpacity>
 
       <View style={styles.formGrid}>
-          {/* المعلومات الأساسية */}
-          <View style={styles.featureGroup}>
-            <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.lung.groups.basic')}</ThemedText>
-            
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.age')}</ThemedText>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                value={lungData.age}
-                onChangeText={(text) =>
-                  setLungData(prev => ({
-                    ...prev,
-                    age: text,
-                    cumulative_smoking: ((parseFloat(text) || 0) * (parseFloat(prev.pack_years) || 0)).toString()
-                  }))
-                }
-                placeholder={t('ai.forms.lung.placeholders.age')}
-                placeholderTextColor={colors.icon}
-                keyboardType="numeric"
-              />
-            </View>
+        {/* المعلومات الأساسية */}
+        <View style={styles.featureGroup}>
+          <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.lung.groups.basic')}</ThemedText>
 
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.packYears')}</ThemedText>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                value={lungData.pack_years}
-                onChangeText={(text) =>
-                  setLungData(prev => ({
-                    ...prev,
-                    pack_years: text,
-                    cumulative_smoking: ((parseFloat(prev.age) || 0) * (parseFloat(text) || 0)).toString()
-                  }))
-                }
-                placeholder={t('ai.forms.lung.placeholders.packYears')}
-                placeholderTextColor={colors.icon}
-                keyboardType="decimal-pad"
-              />
-            </View>
-            
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.cumulative')}</ThemedText>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                value={lungData.cumulative_smoking.toString()}
-                placeholder="0"
-                editable={false}
-              />
-            </View>
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.age')}</ThemedText>
+            <TextInput
+              style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
+              value={lungData.age}
+              onChangeText={(text) =>
+                setLungData(prev => ({
+                  ...prev,
+                  age: text,
+                  cumulative_smoking: ((parseFloat(text) || 0) * (parseFloat(prev.pack_years) || 0)).toString()
+                }))
+              }
+              placeholder={t('ai.forms.lung.placeholders.age')}
+              placeholderTextColor={colors.icon}
+              keyboardType="numeric"
+            />
+          </View>
 
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.gender')}</ThemedText>
-              <View style={styles.radioGroup}>
-                {['Male', 'Female'].map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.radioOption,
-                      {
-                        backgroundColor: lungData.gender === option ? colors.primary : colors.surface,
-                        borderColor: colors.border
-                      }
-                    ]}
-                    onPress={() => setLungData(prev => ({ ...prev, gender: option as 'Male' | 'Female' }))}
-                  >
-                    <ThemedText style={{ color: lungData.gender === option ? 'white' : colors.text }}>
-                      {option === 'Male' ? t('ai.forms.lung.options.male') : t('ai.forms.lung.options.female')}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.packYears')}</ThemedText>
+            <TextInput
+              style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
+              value={lungData.pack_years}
+              onChangeText={(text) =>
+                setLungData(prev => ({
+                  ...prev,
+                  pack_years: text,
+                  cumulative_smoking: ((parseFloat(prev.age) || 0) * (parseFloat(text) || 0)).toString()
+                }))
+              }
+              placeholder={t('ai.forms.lung.placeholders.packYears')}
+              placeholderTextColor={colors.icon}
+              keyboardType="decimal-pad"
+            />
+          </View>
 
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.radon')}</ThemedText>
-              <View style={styles.radioGroup}>
-                {['Low', 'Medium', 'High'].map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.radioOption,
-                      {
-                        backgroundColor: lungData.radon_exposure === option ? colors.primary : colors.surface,
-                        borderColor: colors.border
-                      }
-                    ]}
-                    onPress={() => setLungData(prev => ({ ...prev, radon_exposure: option as any }))}
-                  >
-                    <ThemedText style={{ color: lungData.radon_exposure === option ? 'white' : colors.text }}>
-                      {option === 'Low' ? t('ai.forms.lung.options.low') : option === 'Medium' ? t('ai.forms.lung.options.medium') : t('ai.forms.lung.options.high')}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.cumulative')}</ThemedText>
+            <TextInput
+              style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
+              value={lungData.cumulative_smoking.toString()}
+              placeholder="0"
+              editable={false}
+            />
+          </View>
+
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.gender')}</ThemedText>
+            <View style={styles.radioGroup}>
+              {['Male', 'Female'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.radioOption,
+                    {
+                      backgroundColor: lungData.gender === option ? colors.primary : colors.surface,
+                      borderColor: colors.border
+                    }
+                  ]}
+                  onPress={() => setLungData(prev => ({ ...prev, gender: option as 'Male' | 'Female' }))}
+                >
+                  <ThemedText style={{ color: lungData.gender === option ? 'white' : colors.text }}>
+                    {option === 'Male' ? t('ai.forms.lung.options.male') : t('ai.forms.lung.options.female')}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
 
-          {/* عوامل الخطر */}
-          <View style={styles.featureGroup}>
-            <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.lung.groups.risk')}</ThemedText>
-            
-            {[
-              { key: 'asbestos_exposure', label: t('ai.forms.lung.fields.asbestos') },
-              { key: 'secondhand_smoke_exposure', label: t('ai.forms.lung.fields.secondhand') },
-              { key: 'copd_diagnosis', label: t('ai.forms.lung.fields.copd') },
-              { key: 'family_history', label: t('ai.forms.lung.fields.history') },
-            ].map(({ key, label }) => (
-              <View key={key} style={styles.switchRow}>
-                <ThemedText style={styles.inputLabel}>{label}</ThemedText>
-                <Switch
-                  value={lungData[key as keyof LungCancerData] as boolean}
-                  onValueChange={(value) => setLungData(prev => ({ ...prev, [key]: value }))}
-                  trackColor={{ false: colors.border, true: colors.primary }}
-                />
-              </View>
-            ))}
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.radon')}</ThemedText>
+            <View style={styles.radioGroup}>
+              {['Low', 'Medium', 'High'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.radioOption,
+                    {
+                      backgroundColor: lungData.radon_exposure === option ? colors.primary : colors.surface,
+                      borderColor: colors.border
+                    }
+                  ]}
+                  onPress={() => setLungData(prev => ({ ...prev, radon_exposure: option as any }))}
+                >
+                  <ThemedText style={{ color: lungData.radon_exposure === option ? 'white' : colors.text }}>
+                    {option === 'Low' ? t('ai.forms.lung.options.low') : option === 'Medium' ? t('ai.forms.lung.options.medium') : t('ai.forms.lung.options.high')}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+        </View>
 
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.alcohol')}</ThemedText>
-              <View style={styles.radioGroup}>
-                {['None', 'Moderate', 'Heavy'].map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.radioOption,
-                      {
-                        backgroundColor: lungData.alcohol_consumption === option ? colors.primary : colors.surface,
-                        borderColor: colors.border
-                      }
-                    ]}
-                    onPress={() => setLungData(prev => ({ ...prev, alcohol_consumption: option as any }))}
-                  >
-                    <ThemedText style={{ color: lungData.alcohol_consumption === option ? 'white' : colors.text }}>
-                      {option === 'None' ? t('ai.forms.lung.options.none') : option === 'Moderate' ? t('ai.forms.lung.options.moderate') : t('ai.forms.lung.options.high')}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
+        {/* عوامل الخطر */}
+        <View style={styles.featureGroup}>
+          <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.lung.groups.risk')}</ThemedText>
+
+          {[
+            { key: 'asbestos_exposure', label: t('ai.forms.lung.fields.asbestos') },
+            { key: 'secondhand_smoke_exposure', label: t('ai.forms.lung.fields.secondhand') },
+            { key: 'copd_diagnosis', label: t('ai.forms.lung.fields.copd') },
+            { key: 'family_history', label: t('ai.forms.lung.fields.history') },
+          ].map(({ key, label }) => (
+            <View key={key} style={styles.switchRow}>
+              <ThemedText style={styles.inputLabel}>{label}</ThemedText>
+              <Switch
+                value={lungData[key as keyof LungCancerData] as boolean}
+                onValueChange={(value) => setLungData(prev => ({ ...prev, [key]: value }))}
+                trackColor={{ false: colors.border, true: colors.primary }}
+              />
+            </View>
+          ))}
+
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.lung.fields.alcohol')}</ThemedText>
+            <View style={styles.radioGroup}>
+              {['None', 'Moderate', 'Heavy'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.radioOption,
+                    {
+                      backgroundColor: lungData.alcohol_consumption === option ? colors.primary : colors.surface,
+                      borderColor: colors.border
+                    }
+                  ]}
+                  onPress={() => setLungData(prev => ({ ...prev, alcohol_consumption: option as any }))}
+                >
+                  <ThemedText style={{ color: lungData.alcohol_consumption === option ? 'white' : colors.text }}>
+                    {option === 'None' ? t('ai.forms.lung.options.none') : option === 'Moderate' ? t('ai.forms.lung.options.moderate') : t('ai.forms.lung.options.high')}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         </View>
       </View>
+    </View>
   );
 
   const renderColorectalCancerForm = () => (
     <View style={styles.fullFormContainer}>
       <ThemedText type="subtitle" style={styles.formTitle}>{t('ai.forms.colorectal.title')}</ThemedText>
-      
-      <TouchableOpacity 
-        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]} 
+
+      <TouchableOpacity
+        style={[styles.uploadButton, { backgroundColor: colors.tint, marginBottom: 20 }]}
         onPress={() => handlePdfUpload('colorectal')}
       >
         <IconSymbol name="doc.text" size={20} color="white" style={{ marginRight: 8 }} />
@@ -730,163 +730,163 @@ export default function AiAnalysisScreen() {
       </TouchableOpacity>
 
       <View style={styles.formGrid}>
-          {/* المعلومات الشخصية */}
-          <View style={styles.featureGroup}>
-            <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.colorectal.groups.personal')}</ThemedText>
-            
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.age')}</ThemedText>
+        {/* المعلومات الشخصية */}
+        <View style={styles.featureGroup}>
+          <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.colorectal.groups.personal')}</ThemedText>
+
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.age')}</ThemedText>
+            <TextInput
+              style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
+              value={colorectalData.Age}
+              onChangeText={(text) => setColorectalData(prev => ({ ...prev, Age: text }))}
+              placeholder={t('ai.forms.colorectal.placeholders.age')}
+              placeholderTextColor={colors.icon}
+              keyboardType="numeric"
+            />
+          </View>
+
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.gender')}</ThemedText>
+            <View style={styles.radioGroup}>
+              {['Male', 'Female'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.radioOption,
+                    {
+                      backgroundColor: colorectalData.Gender === option ? colors.primary : colors.surface,
+                      borderColor: colors.border
+                    }
+                  ]}
+                  onPress={() => setColorectalData(prev => ({ ...prev, Gender: option as 'Male' | 'Female' }))}
+                >
+                  <ThemedText style={{ color: colorectalData.Gender === option ? 'white' : colors.text }}>
+                    {option === 'Male' ? t('ai.forms.colorectal.options.male') : t('ai.forms.colorectal.options.female')}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.bmi')}</ThemedText>
+            <TextInput
+              style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
+              value={colorectalData.BMI}
+              onChangeText={(text) => setColorectalData(prev => ({ ...prev, BMI: text }))}
+              placeholder={t('ai.forms.colorectal.placeholders.bmi')}
+              placeholderTextColor={colors.icon}
+              keyboardType="decimal-pad"
+            />
+          </View>
+
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.lifestyle')}</ThemedText>
+            <View style={styles.radioGroup}>
+              {['Sedentary', 'Moderate Exercise', 'Active', 'Smoker'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.radioOption,
+                    {
+                      backgroundColor: colorectalData.Lifestyle === option ? colors.primary : colors.surface,
+                      borderColor: colors.border
+                    }
+                  ]}
+                  onPress={() => setColorectalData(prev => ({ ...prev, Lifestyle: option as any }))}
+                >
+                  <ThemedText style={{ color: colorectalData.Lifestyle === option ? 'white' : colors.text }}>
+                    {option === 'Sedentary' ? t('ai.forms.colorectal.options.sedentary') : option === 'Moderate Exercise' ? t('ai.forms.colorectal.options.active') : option === 'Active' ? t('ai.forms.colorectal.options.veryActive') : 'Smoker'}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.ethnicity')}</ThemedText>
+            <View style={styles.pickerContainer}>
+              {['African', 'Asian', 'Caucasian', 'Hispanic', 'Other'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.chipOption,
+                    {
+                      backgroundColor: colorectalData.Ethnicity === option ? colors.primary : colors.surface,
+                      borderColor: colors.border
+                    }
+                  ]}
+                  onPress={() => setColorectalData(prev => ({ ...prev, Ethnicity: option }))}
+                >
+                  <ThemedText style={{ color: colorectalData.Ethnicity === option ? 'white' : colors.text, fontSize: 12 }}>
+                    {option}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.formRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.conditions')}</ThemedText>
+            <View style={styles.pickerContainer}>
+              {['None', 'Diabetes', 'Other'].map((option) => (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.chipOption,
+                    {
+                      backgroundColor: colorectalData['Pre-existing Conditions'] === option ? colors.primary : colors.surface,
+                      borderColor: colors.border
+                    }
+                  ]}
+                  onPress={() => setColorectalData(prev => ({ ...prev, 'Pre-existing Conditions': option }))}
+                >
+                  <ThemedText style={{ color: colorectalData['Pre-existing Conditions'] === option ? 'white' : colors.text, fontSize: 12 }}>
+                    {option}
+                  </ThemedText>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+
+          <View style={styles.switchRow}>
+            <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.history')}</ThemedText>
+            <Switch
+              value={colorectalData.Family_History_CRC}
+              onValueChange={(value) => setColorectalData(prev => ({ ...prev, Family_History_CRC: value }))}
+              trackColor={{ false: colors.border, true: colors.primary }}
+            />
+          </View>
+        </View>
+
+        {/* المعلومات الغذائية */}
+        <View style={styles.featureGroup}>
+          <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.colorectal.groups.nutritional')}</ThemedText>
+
+          {[
+            { key: 'Carbohydrates (g)', labelKey: 'carbs' },
+            { key: 'Proteins (g)', labelKey: 'proteins' },
+            { key: 'Fats (g)', labelKey: 'fats' },
+            { key: 'Vitamin A (IU)', labelKey: 'vitA' },
+            { key: 'Vitamin C (mg)', labelKey: 'vitC' },
+            { key: 'Iron (mg)', labelKey: 'iron' },
+          ].map(({ key, labelKey }) => (
+            <View key={key} style={styles.formRow}>
+              <ThemedText style={styles.inputLabel}>{t(`ai.forms.colorectal.fields.${labelKey}`)}</ThemedText>
               <TextInput
                 style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                value={colorectalData.Age}
-                onChangeText={(text) => setColorectalData(prev => ({ ...prev, Age: text }))}
-                placeholder={t('ai.forms.colorectal.placeholders.age')}
+                value={colorectalData[key as keyof ColorectalCancerData] as string}
+                onChangeText={(text) => setColorectalData(prev => ({ ...prev, [key]: text }))}
+                placeholder={t('ai.forms.colorectal.placeholders.generic', { label: t(`ai.forms.colorectal.fields.${labelKey}`) })}
                 placeholderTextColor={colors.icon}
                 keyboardType="numeric"
               />
             </View>
-
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.gender')}</ThemedText>
-              <View style={styles.radioGroup}>
-                {['Male', 'Female'].map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.radioOption,
-                      {
-                        backgroundColor: colorectalData.Gender === option ? colors.primary : colors.surface,
-                        borderColor: colors.border
-                      }
-                    ]}
-                    onPress={() => setColorectalData(prev => ({ ...prev, Gender: option as 'Male' | 'Female' }))}
-                  >
-                    <ThemedText style={{ color: colorectalData.Gender === option ? 'white' : colors.text }}>
-                      {option === 'Male' ? t('ai.forms.colorectal.options.male') : t('ai.forms.colorectal.options.female')}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.bmi')}</ThemedText>
-              <TextInput
-                style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                value={colorectalData.BMI}
-                onChangeText={(text) => setColorectalData(prev => ({ ...prev, BMI: text }))}
-                placeholder={t('ai.forms.colorectal.placeholders.bmi')}
-                placeholderTextColor={colors.icon}
-                keyboardType="decimal-pad"
-              />
-            </View>
-
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.lifestyle')}</ThemedText>
-              <View style={styles.radioGroup}>
-                {['Sedentary', 'Moderate', 'Active', 'Smoker'].map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.radioOption,
-                      {
-                        backgroundColor: colorectalData.Lifestyle === option ? colors.primary : colors.surface,
-                        borderColor: colors.border
-                      }
-                    ]}
-                    onPress={() => setColorectalData(prev => ({ ...prev, Lifestyle: option as any }))}
-                  >
-                    <ThemedText style={{ color: colorectalData.Lifestyle === option ? 'white' : colors.text }}>
-                      {option === 'Sedentary' ? t('ai.forms.colorectal.options.sedentary') : option === 'Moderate' ? t('ai.forms.colorectal.options.active') : option === 'Active' ? t('ai.forms.colorectal.options.veryActive') : 'Smoker'}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.ethnicity')}</ThemedText>
-              <View style={styles.pickerContainer}>
-                {['African', 'Asian', 'Caucasian', 'Hispanic', 'Other'].map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.chipOption,
-                      {
-                        backgroundColor: colorectalData.Ethnicity === option ? colors.primary : colors.surface,
-                        borderColor: colors.border
-                      }
-                    ]}
-                    onPress={() => setColorectalData(prev => ({ ...prev, Ethnicity: option }))}
-                  >
-                    <ThemedText style={{ color: colorectalData.Ethnicity === option ? 'white' : colors.text, fontSize: 12 }}>
-                      {option}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.formRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.conditions')}</ThemedText>
-              <View style={styles.pickerContainer}>
-                {['None', 'Diabetes', 'Other'].map((option) => (
-                  <TouchableOpacity
-                    key={option}
-                    style={[
-                      styles.chipOption,
-                      {
-                        backgroundColor: colorectalData['Pre-existing Conditions'] === option ? colors.primary : colors.surface,
-                        borderColor: colors.border
-                      }
-                    ]}
-                    onPress={() => setColorectalData(prev => ({ ...prev, 'Pre-existing Conditions': option }))}
-                  >
-                    <ThemedText style={{ color: colorectalData['Pre-existing Conditions'] === option ? 'white' : colors.text, fontSize: 12 }}>
-                      {option}
-                    </ThemedText>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
-
-            <View style={styles.switchRow}>
-              <ThemedText style={styles.inputLabel}>{t('ai.forms.colorectal.fields.history')}</ThemedText>
-              <Switch
-                value={colorectalData.Family_History_CRC}
-                onValueChange={(value) => setColorectalData(prev => ({ ...prev, Family_History_CRC: value }))}
-                trackColor={{ false: colors.border, true: colors.primary }}
-              />
-            </View>
-          </View>
-
-          {/* المعلومات الغذائية */}
-          <View style={styles.featureGroup}>
-            <ThemedText type="defaultSemiBold" style={styles.groupTitle}>{t('ai.forms.colorectal.groups.nutritional')}</ThemedText>
-            
-            {[
-              { key: 'Carbohydrates (g)', labelKey: 'carbs' },
-              { key: 'Proteins (g)', labelKey: 'proteins' },
-              { key: 'Fats (g)', labelKey: 'fats' },
-              { key: 'Vitamin A (IU)', labelKey: 'vitA' },
-              { key: 'Vitamin C (mg)', labelKey: 'vitC' },
-              { key: 'Iron (mg)', labelKey: 'iron' },
-            ].map(({ key, labelKey }) => (
-              <View key={key} style={styles.formRow}>
-                <ThemedText style={styles.inputLabel}>{t(`ai.forms.colorectal.fields.${labelKey}`)}</ThemedText>
-                <TextInput
-                  style={[styles.input, { borderColor: colors.border, backgroundColor: colors.surface, color: colors.text }]}
-                  value={colorectalData[key as keyof ColorectalCancerData] as string}
-                  onChangeText={(text) => setColorectalData(prev => ({ ...prev, [key]: text }))}
-                  placeholder={t('ai.forms.colorectal.placeholders.generic', { label: t(`ai.forms.colorectal.fields.${labelKey}`) })}
-                  placeholderTextColor={colors.icon}
-                  keyboardType="numeric"
-                />
-              </View>
-            ))}
-          </View>
+          ))}
         </View>
       </View>
+    </View>
   );
 
   const renderDataForm = () => {
@@ -936,29 +936,29 @@ export default function AiAnalysisScreen() {
         <TouchableWithoutFeedback onPress={() => setResult(null)}>
           <View style={styles.modalOverlay}>
             <TouchableWithoutFeedback>
-              <View style={[styles.resultCard, { 
+              <View style={[styles.resultCard, {
                 backgroundColor: colors.surface,
                 borderColor: resultColor,
                 borderWidth: 2
               }]}>
-                <TouchableOpacity 
-                  style={styles.closeButton} 
+                <TouchableOpacity
+                  style={styles.closeButton}
                   onPress={() => setResult(null)}
                 >
                   <IconSymbol name="xmark.circle.fill" size={30} color={colors.icon} />
                 </TouchableOpacity>
 
                 <View style={styles.resultHeader}>
-                  <IconSymbol 
-                    name={isPositive ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"} 
-                    size={24} 
-                    color={resultColor} 
+                  <IconSymbol
+                    name={isPositive ? "exclamationmark.triangle.fill" : "checkmark.circle.fill"}
+                    size={24}
+                    color={resultColor}
                   />
                   <ThemedText type="subtitle" style={{ color: resultColor, marginLeft: 8 }}>
                     {t('ai.results.title')}
                   </ThemedText>
                 </View>
-                
+
                 <View style={styles.resultContent}>
                   <View style={styles.resultRow}>
                     <ThemedText style={styles.resultLabel}>{t('ai.results.diagnosis')}</ThemedText>
@@ -966,14 +966,14 @@ export default function AiAnalysisScreen() {
                       {prediction.class === 'positive' ? t('ai.results.positive') : t('ai.results.negative')}
                     </ThemedText>
                   </View>
-                  
+
                   <View style={styles.resultRow}>
                     <ThemedText style={styles.resultLabel}>{t('ai.results.probability')}</ThemedText>
                     <ThemedText type="defaultSemiBold">
                       {(prediction.probability * 100).toFixed(2)}%
                     </ThemedText>
                   </View>
-                  
+
                   <View style={styles.resultRow}>
                     <ThemedText style={styles.resultLabel}>{t('ai.results.riskLevel')}</ThemedText>
                     <View style={[styles.riskBadge, { backgroundColor: riskLevelColors[prediction.risk_level] + '30' }]}>
@@ -982,7 +982,7 @@ export default function AiAnalysisScreen() {
                       </ThemedText>
                     </View>
                   </View>
-                  
+
                   <View style={[styles.resultFooter, { borderTopColor: colors.border }]}>
                     <ThemedText style={{ fontSize: 12, opacity: 0.6 }}>
                       {t('ai.results.type')} {t(`ai.types.${selectedCancerType}`)}
@@ -1008,69 +1008,69 @@ export default function AiAnalysisScreen() {
 
       <View style={{ flex: 1 }}>
         <ThemedView style={{ flex: 1 }}>
-                    <ScrollView 
-                      contentContainerStyle={{ padding: 24, paddingBottom: 120 }}
-                      showsVerticalScrollIndicator={true}
+          <ScrollView
+            contentContainerStyle={{ padding: 24, paddingBottom: 120 }}
+            showsVerticalScrollIndicator={true}
+          >
+            {/* العنوان */}
+            <ThemedText type="title" style={styles.header}>
+              {t('ai.title')}
+            </ThemedText>
+
+            <ThemedText style={styles.description}>
+              {t('ai.description')}
+            </ThemedText>
+
+            {/* قسم اختيار نوع السرطان */}
+            <View style={styles.section}>
+              <ThemedText type="subtitle" style={styles.sectionTitle}>
+                {t('ai.chooseType')}
+              </ThemedText>
+              <View style={styles.cancerTypesContainer}>
+                {CANCER_TYPES.map((cancer) => (
+                  <TouchableOpacity
+                    key={cancer.id}
+                    style={[
+                      styles.cancerTypeButton,
+                      {
+                        backgroundColor: selectedCancerType === cancer.id
+                          ? colors.primary
+                          : colors.surface,
+                        borderColor: selectedCancerType === cancer.id
+                          ? colors.primary
+                          : colors.border,
+                      },
+                    ]}
+                    onPress={() => handleCancerTypeSelect(cancer.id)}
+                    disabled={analyzing}
+                  >
+                    <ThemedText
+                      style={{
+                        color: selectedCancerType === cancer.id
+                          ? "white"
+                          : colors.text,
+                      }}
                     >
-                      {/* العنوان */}
-                      <ThemedText type="title" style={styles.header}>
-                        {t('ai.title')}
-                      </ThemedText>
-          
-                      <ThemedText style={styles.description}>
-                        {t('ai.description')}
-                      </ThemedText>
-          
-                      {/* قسم اختيار نوع السرطان */}
-                      <View style={styles.section}>
-                        <ThemedText type="subtitle" style={styles.sectionTitle}>
-                          {t('ai.chooseType')}
-                        </ThemedText>
-                        <View style={styles.cancerTypesContainer}>
-                          {CANCER_TYPES.map((cancer) => (
-                            <TouchableOpacity
-                              key={cancer.id}
-                              style={[
-                                styles.cancerTypeButton,
-                                {
-                                  backgroundColor: selectedCancerType === cancer.id 
-                                    ? colors.primary 
-                                    : colors.surface,
-                                  borderColor: selectedCancerType === cancer.id
-                                    ? colors.primary
-                                    : colors.border,
-                                },
-                              ]}
-                              onPress={() => handleCancerTypeSelect(cancer.id)}
-                              disabled={analyzing}
-                            >
-                              <ThemedText
-                                style={{
-                                  color: selectedCancerType === cancer.id
-                                    ? "white"
-                                    : colors.text,
-                                }}
-                              >
-                                {t(`ai.types.${cancer.id}`)}
-                              </ThemedText>
-                            </TouchableOpacity>
-                          ))}
-                        </View>
-                      </View>
-          
-                      {/* الفورم */}
-                      {selectedCancerType && (
-                        <View style={{ marginTop: 10 }}>
-                          <ThemedText type="subtitle" style={styles.sectionTitle}>
-                            {t('ai.enterData', { type: t(`ai.types.${selectedCancerType}`) })}
-                          </ThemedText>
-                          {renderDataForm()}
-                        </View>
-                      )}
+                      {t(`ai.types.${cancer.id}`)}
+                    </ThemedText>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {/* الفورم */}
+            {selectedCancerType && (
+              <View style={{ marginTop: 10 }}>
+                <ThemedText type="subtitle" style={styles.sectionTitle}>
+                  {t('ai.enterData', { type: t(`ai.types.${selectedCancerType}`) })}
+                </ThemedText>
+                {renderDataForm()}
+              </View>
+            )}
 
             {/* النتيجة */}
             {!analyzing && result && renderResult()}
-            
+
             {/* Loading indicator */}
             {analyzing && (
               <View style={styles.loadingContainer}>
